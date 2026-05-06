@@ -112,6 +112,60 @@ function useO365RedirectHandler() {
  * On le récupère via getState() à l'intérieur du timer pour avoir toujours
  * la version courante sans déclencher de re-render.
  */
+/**
+ * Au démarrage de l'app : vérifie la conformité IOBSP du collaborateur
+ * connecté. Si des certifs sont expirées ou expirent dans < 60 jours,
+ * affiche une bannière toast persistante avec lien vers Paramètres.
+ *
+ * Une fois par session uniquement (pas de spam à chaque navigation).
+ */
+function useConformiteAlertOnLogin() {
+  const { currentUser } = useAuth()
+  const shownRef = useRef(false)
+
+  useEffect(() => {
+    if (!currentUser || shownRef.current) return
+    shownRef.current = true
+
+    void (async () => {
+      try {
+        // Import dynamique pour éviter le coût au boot si pas connecté
+        const { conformite } = await import('@/db/api')
+        const status = await conformite.status()
+        if (status.global === 'ko') {
+          const expirees = status.alertes.filter((a) => a.statut === 'expire')
+          const description = expirees.length > 0
+            ? `${expirees.length} document(s) expiré(s) — risque de contrôle ACPR.`
+            : `${status.typesManquants.length} document(s) obligatoire(s) manquant(s).`
+          toast.error('⚠️ Conformité IOBSP non conforme', {
+            description,
+            duration: 15_000,
+            action: {
+              label: 'Voir Paramètres',
+              onClick: () => { window.location.hash = '#/parametres' },
+            },
+          })
+        } else if (status.global === 'warn') {
+          const proches = status.alertes.filter((a) => a.statut === 'alerte')
+          if (proches.length > 0) {
+            toast.warning('Conformité IOBSP : alertes', {
+              description: `${proches.length} document(s) à renouveler bientôt.`,
+              duration: 8000,
+              action: {
+                label: 'Voir',
+                onClick: () => { window.location.hash = '#/parametres' },
+              },
+            })
+          }
+        }
+      } catch (e) {
+        // Silencieux — l'API peut être indisponible, on ne bloque pas
+        console.warn('[conformite] alert check failed', e)
+      }
+    })()
+  }, [currentUser])
+}
+
 function useO365AutoSync() {
   const settings = useStore((s) => s.settings)
   const { currentUser } = useAuth()
@@ -392,6 +446,7 @@ export default function App() {
   useO365RedirectHandler()
   useO365AutoSync()
   useO365KeepAlive()
+  useConformiteAlertOnLogin()
   useBackendSyncResume()
   const { state: updateState, install: installUpdate } = useTauriUpdater()
 

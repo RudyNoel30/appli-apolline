@@ -812,6 +812,110 @@ const mark_facture_reglee: ToolDefinition = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONFORMITÉ IOBSP (Niveau 1 + 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const check_conformite: ToolDefinition = {
+  name: 'check_conformite',
+  description: 'Vérifie le statut de conformité IOBSP du courtier connecté : certifs (ORIAS, RC pro, garantie financière), heures de formation continue (15h/an obligatoires), alertes d\'expiration. Niveau 1 — lecture.',
+  level: 1,
+  input_schema: {
+    type: 'object',
+    properties: {
+      collaborateur_id: { type: 'string', description: 'UUID du collab (admin uniquement, défaut: user courant)' },
+    },
+  },
+  handler: async (input, ctx) => {
+    const targetId = (ctx.userRole === 'admin' && input.collaborateur_id)
+      ? String(input.collaborateur_id)
+      : ctx.userId
+
+    const certifs = await db.select().from(schema.conformiteCertifs)
+      .where(eq(schema.conformiteCertifs.collaborateurId, targetId))
+
+    const now = Date.now()
+    const certifsAvecStatut = certifs.map((cf) => {
+      if (!cf.expireLe) return { ...cf, daysUntilExpire: null, statut: 'ok' as const }
+      const days = Math.floor((new Date(cf.expireLe).getTime() - now) / 86400000)
+      const statut: 'ok' | 'alerte' | 'expire' =
+        days < 0 ? 'expire' : days <= cf.alerteJoursAvant ? 'alerte' : 'ok'
+      return { ...cf, daysUntilExpire: days, statut }
+    })
+
+    const TYPES_REQUIS = ['orias', 'rc_pro', 'garantie_financiere', 'carte_pro']
+    const typesPresents = new Set<string>(certifs.map((c) => c.type as string))
+    const typesManquants = TYPES_REQUIS.filter((t) => !typesPresents.has(t))
+
+    const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString()
+    const formationsRes = await db.execute(sql`
+      SELECT COALESCE(SUM(duree_heures), 0)::float AS h
+      FROM conformite_formations
+      WHERE collaborateur_id = ${targetId}
+        AND type = 'continue'
+        AND date_debut >= ${yearStart}::timestamptz
+    `)
+    const fRows: Array<Record<string, unknown>> =
+      Array.isArray(formationsRes) ? formationsRes :
+      Array.isArray((formationsRes as { rows?: unknown[] })?.rows) ? (formationsRes as { rows: Array<Record<string, unknown>> }).rows : []
+    const heuresAnnee = Number(fRows[0]?.h ?? 0)
+
+    return {
+      heures_formation_annee: heuresAnnee,
+      heures_obligatoires: 15,
+      formation_ok: heuresAnnee >= 15,
+      certifs: certifsAvecStatut.map((c) => ({
+        id: c.id, type: c.type, libelle: c.libelle,
+        expire_le: c.expireLe, jours_avant_expiration: c.daysUntilExpire, statut: c.statut,
+      })),
+      types_manquants: typesManquants,
+      alertes: certifsAvecStatut.filter((c) => c.statut !== 'ok').map((c) => ({
+        type: c.type, libelle: c.libelle, statut: c.statut, jours: c.daysUntilExpire,
+      })),
+    }
+  },
+}
+
+const add_formation: ToolDefinition = {
+  name: 'add_formation',
+  description: 'Ajoute une session de formation IOBSP au compteur du courtier (compte pour les 15h/an). Niveau 2 — exécuté directement.',
+  level: 2,
+  input_schema: {
+    type: 'object',
+    properties: {
+      titre: { type: 'string' },
+      organisme: { type: 'string' },
+      theme: { type: 'string', description: 'LCB-FT, Crédit immobilier, Conformité IOBSP, …' },
+      date_debut: { type: 'string', description: 'Date ISO (yyyy-mm-dd)' },
+      duree_heures: { type: 'number' },
+      type: { type: 'string', description: 'continue (défaut, compte pour 15h) | initiale | thematique' },
+    },
+    required: ['titre', 'date_debut', 'duree_heures'],
+  },
+  handler: async (input, ctx) => {
+    const inserted = await db.insert(schema.conformiteFormations).values({
+      collaborateurId: ctx.userId,
+      titre: String(input.titre),
+      organismeFormateur: (input.organisme as string) ?? null,
+      type: ((input.type as string) ?? 'continue') as never,
+      theme: (input.theme as string) ?? null,
+      dateDebut: String(input.date_debut),
+      dureeHeures: Number(input.duree_heures),
+      createdBy: ctx.userId,
+    } as never).returning()
+    const formation = inserted[0]
+    if (!formation) return { error: 'Échec insertion' }
+
+    audit({
+      action: 'create', userId: ctx.userId, userEmail: ctx.userEmail,
+      entityType: 'coworker_tool_call', entityId: `add_formation:${formation.id}`,
+      details: `tool=add_formation "${input.titre}" ${input.duree_heures}h`,
+      ip: ctx.ip, userAgent: ctx.userAgent,
+    })
+    return { ok: true, formation }
+  },
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // REGISTRY
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -819,10 +923,10 @@ export const ALL_TOOLS: ToolDefinition[] = [
   // Niveau 1 — lecture
   list_dossiers, get_dossier, list_clients, get_client,
   compute_hcsf, list_pieces, get_current_context, list_skills,
-  list_factures, get_facture,
+  list_factures, get_facture, check_conformite,
   // Niveau 2 — mutations cadrées
   create_note, update_dossier_statut, update_dossier, run_skill, search_recent_audit,
-  mark_facture_reglee,
+  mark_facture_reglee, add_formation,
   // Niveau 3 — création (confirmation utilisateur requise)
   create_dossier, create_client, create_facture,
 ]

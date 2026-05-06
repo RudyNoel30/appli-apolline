@@ -533,6 +533,61 @@ export const facturesCounters = pgTable('factures_counters', {
 }))
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONFORMITÉ IOBSP (carte ORIAS, RC pro, garantie financière, formations 15h/an)
+// Pour chaque collaborateur, on suit les certifs avec dates d'expiration et
+// les heures de formation continue (15h/an obligatoires depuis l'arrêté du
+// 9 juin 2016, codifié aux articles R.519-4 à R.519-15 CMF).
+// ─────────────────────────────────────────────────────────────────────────────
+export const conformiteCertifs = pgTable('conformite_certifs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  collaborateurId: text('collaborateur_id').notNull().references(() => collaborateurs.id, { onDelete: 'cascade' }),
+  type: text('type', {
+    enum: ['orias', 'carte_pro', 'rc_pro', 'garantie_financiere', 'capacite_pro', 'autre'],
+  }).notNull(),
+  libelle: text('libelle').notNull(),
+  organismeEmetteur: text('organisme_emetteur'),
+  numero: text('numero'),
+  emiseLe: timestamp('emise_le', { withTimezone: true, mode: 'string' }),
+  valideDu: timestamp('valide_du', { withTimezone: true, mode: 'string' }),
+  expireLe: timestamp('expire_le', { withTimezone: true, mode: 'string' }),
+  /** Montant en centimes (garantie financière, RC pro). */
+  montantGarantie: integer('montant_garantie'),
+  filename: text('filename'),
+  filePath: text('file_path'),
+  sha256: text('sha256'),
+  alerteJoursAvant: integer('alerte_jours_avant').notNull().default(60),
+  notes: text('notes'),
+  createdBy: text('created_by').references(() => collaborateurs.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (t) => ({
+  collabIdx: index('conformite_certifs_collab_idx').on(t.collaborateurId),
+  expireIdx: index('conformite_certifs_expire_idx').on(t.expireLe),
+  typeIdx: index('conformite_certifs_type_idx').on(t.type),
+}))
+
+export const conformiteFormations = pgTable('conformite_formations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  collaborateurId: text('collaborateur_id').notNull().references(() => collaborateurs.id, { onDelete: 'cascade' }),
+  titre: text('titre').notNull(),
+  organismeFormateur: text('organisme_formateur'),
+  type: text('type', { enum: ['initiale', 'continue', 'thematique'] }).notNull().default('continue'),
+  theme: text('theme'),
+  dateDebut: timestamp('date_debut', { withTimezone: true, mode: 'string' }).notNull(),
+  dateFin: timestamp('date_fin', { withTimezone: true, mode: 'string' }),
+  dureeHeures: real('duree_heures').notNull().default(0),
+  filename: text('filename'),
+  filePath: text('file_path'),
+  sha256: text('sha256'),
+  notes: text('notes'),
+  createdBy: text('created_by').references(() => collaborateurs.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (t) => ({
+  collabIdx: index('conformite_formations_collab_idx').on(t.collaborateurId),
+  dateIdx: index('conformite_formations_date_idx').on(t.dateDebut),
+}))
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COWORKER (assistant Claude conversationnel — chat persistant par utilisateur)
 // Une conversation contient N messages. Chaque message peut être :
 //   - role 'user' (saisie collab)
@@ -614,6 +669,10 @@ export type Notification = typeof notifications.$inferSelect
 export type NewNotification = typeof notifications.$inferInsert
 export type Piece = typeof pieces.$inferSelect
 export type NewPiece = typeof pieces.$inferInsert
+export type ConformiteCertif = typeof conformiteCertifs.$inferSelect
+export type NewConformiteCertif = typeof conformiteCertifs.$inferInsert
+export type ConformiteFormation = typeof conformiteFormations.$inferSelect
+export type NewConformiteFormation = typeof conformiteFormations.$inferInsert
 export type Facture = typeof factures.$inferSelect
 export type NewFacture = typeof factures.$inferInsert
 export type FactureCounter = typeof facturesCounters.$inferSelect

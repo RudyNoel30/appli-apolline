@@ -20,6 +20,7 @@ import { piecesRoute } from './routes/pieces.js'
 import { aiRoute } from './routes/ai.js'
 import { coworkerRoute } from './routes/coworker.js'
 import { facturesRoute } from './routes/factures.js'
+import { conformiteRoute } from './routes/conformite.js'
 import { sseRoute } from './realtime/sse.js'
 import { startCron } from './realtime/cron.js'
 import { hashPassword } from './middleware/auth.js'
@@ -121,6 +122,7 @@ app.route('/api', piecesRoute)
 app.route('/api/ai', aiRoute)
 app.route('/api/coworker', coworkerRoute)
 app.route('/api/factures', facturesRoute)
+app.route('/api/conformite', conformiteRoute)
 
 // ─── CRUD entités métier ───
 app.route('/api/clients', crudRoute({

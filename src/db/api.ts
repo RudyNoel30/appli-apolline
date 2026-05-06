@@ -487,6 +487,140 @@ export const factures = {
   },
 }
 
+/* ────────────────── Conformité IOBSP ────────────────── */
+
+export type ConformiteCertifType = 'orias' | 'carte_pro' | 'rc_pro' | 'garantie_financiere' | 'capacite_pro' | 'autre'
+
+export type ConformiteCertif = {
+  id: string
+  collaborateurId: string
+  type: ConformiteCertifType
+  libelle: string
+  organismeEmetteur: string | null
+  numero: string | null
+  emiseLe: string | null
+  valideDu: string | null
+  expireLe: string | null
+  /** Centimes */
+  montantGarantie: number | null
+  filename: string | null
+  alerteJoursAvant: number
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ConformiteFormationType = 'initiale' | 'continue' | 'thematique'
+
+export type ConformiteFormation = {
+  id: string
+  collaborateurId: string
+  titre: string
+  organismeFormateur: string | null
+  type: ConformiteFormationType
+  theme: string | null
+  dateDebut: string
+  dateFin: string | null
+  dureeHeures: number
+  filename: string | null
+  notes: string | null
+  createdAt: string
+}
+
+export type ConformiteStatus = {
+  collaborateurId: string
+  score: number  // 0-100
+  global: 'ok' | 'warn' | 'ko'
+  certifs: Array<{
+    id: string
+    type: string
+    libelle: string
+    expireLe: string | null
+    daysUntilExpire: number | null
+    statut: 'ok' | 'alerte' | 'expire' | 'manquant'
+  }>
+  typesManquants: string[]
+  formation: {
+    heuresObligatoires: number
+    heuresAnnee: number
+    heuresAnneePrev: number
+    anneeOk: boolean
+    pourcentage: number
+  }
+  alertes: Array<{
+    id: string
+    type: string
+    libelle: string
+    expireLe: string | null
+    daysUntilExpire: number | null
+    statut: 'ok' | 'alerte' | 'expire' | 'manquant'
+  }>
+}
+
+export const conformite = {
+  listCertifs(collaborateurId?: string): Promise<{ certifs: ConformiteCertif[] }> {
+    const q = collaborateurId ? `?collaborateurId=${encodeURIComponent(collaborateurId)}` : ''
+    return request('GET', `/api/conformite/certifs${q}`)
+  },
+  createCertif(data: {
+    collaborateurId?: string
+    type: ConformiteCertifType
+    libelle: string
+    organismeEmetteur?: string | null
+    numero?: string | null
+    emiseLe?: string | null
+    valideDu?: string | null
+    expireLe?: string | null
+    /** En EUR (pas centimes) */
+    montantGarantie?: number | null
+    alerteJoursAvant?: number
+    notes?: string | null
+  }): Promise<{ certif: ConformiteCertif }> {
+    return request('POST', '/api/conformite/certifs', data)
+  },
+  updateCertif(id: string, patch: Partial<{
+    libelle: string
+    organismeEmetteur: string | null
+    numero: string | null
+    emiseLe: string | null
+    valideDu: string | null
+    expireLe: string | null
+    montantGarantie: number | null
+    alerteJoursAvant: number
+    notes: string | null
+  }>): Promise<{ certif: ConformiteCertif }> {
+    return request('PATCH', `/api/conformite/certifs/${encodeURIComponent(id)}`, patch)
+  },
+  deleteCertif(id: string): Promise<{ ok: true }> {
+    return request('DELETE', `/api/conformite/certifs/${encodeURIComponent(id)}`)
+  },
+
+  listFormations(collaborateurId?: string): Promise<{ formations: ConformiteFormation[] }> {
+    const q = collaborateurId ? `?collaborateurId=${encodeURIComponent(collaborateurId)}` : ''
+    return request('GET', `/api/conformite/formations${q}`)
+  },
+  createFormation(data: {
+    collaborateurId?: string
+    titre: string
+    organismeFormateur?: string | null
+    type?: ConformiteFormationType
+    theme?: string | null
+    dateDebut: string
+    dateFin?: string | null
+    dureeHeures: number
+    notes?: string | null
+  }): Promise<{ formation: ConformiteFormation }> {
+    return request('POST', '/api/conformite/formations', data)
+  },
+  deleteFormation(id: string): Promise<{ ok: true }> {
+    return request('DELETE', `/api/conformite/formations/${encodeURIComponent(id)}`)
+  },
+  status(collaborateurId?: string): Promise<ConformiteStatus> {
+    const q = collaborateurId ? `?collaborateurId=${encodeURIComponent(collaborateurId)}` : ''
+    return request('GET', `/api/conformite/status${q}`)
+  },
+}
+
 /* ────────────────── Coworker (Claude conversationnel) ────────────────── */
 
 export type CoworkerConversation = {

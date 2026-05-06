@@ -2,8 +2,9 @@ import { useState, useEffect, type FormEvent } from 'react'
 import {
   User2, Landmark, FileText, Database, ShieldCheck, Palette, UsersRound,
   Plus, Trash2, Pencil, KeyRound, Save, Download, RefreshCw, Plug, Check,
-  LinkIcon, Calendar, Mail, Scale, Sparkles,
+  LinkIcon, Calendar, Mail, Scale, Sparkles, Shield,
 } from 'lucide-react'
+import ConformitePane from '@/components/ConformitePane'
 import RgpdPane from '@/components/RgpdPane'
 import AiUsagePane from '@/components/AiUsagePane'
 import { toast } from 'sonner'
@@ -19,7 +20,7 @@ import { saveFile, FILTERS } from '@/lib/saveFile'
 import { exportToXlsx } from '@/lib/excelExport'
 import { sync, auth } from '@/db/api'
 
-type Tab = 'profil' | 'collaborateurs' | 'banques' | 'templates' | 'integrations' | 'donnees' | 'rgpd' | 'ai' | 'securite' | 'apparence'
+type Tab = 'profil' | 'collaborateurs' | 'banques' | 'templates' | 'integrations' | 'donnees' | 'rgpd' | 'conformite' | 'ai' | 'securite' | 'apparence'
 
 export default function Parametres() {
   const [tab, setTab] = useState<Tab>('profil')
@@ -32,6 +33,7 @@ export default function Parametres() {
     { key: 'integrations', label: 'Intégrations', icon: Plug },
     { key: 'donnees', label: 'Données & sauvegarde', icon: Database },
     { key: 'rgpd', label: 'RGPD & conformité', icon: Scale },
+    { key: 'conformite', label: 'Conformité IOBSP', icon: Shield },
     { key: 'ai', label: 'Conso IA', icon: Sparkles },
     { key: 'securite', label: 'Sécurité', icon: ShieldCheck },
     { key: 'apparence', label: 'Apparence', icon: Palette },
@@ -70,6 +72,7 @@ export default function Parametres() {
           {tab === 'integrations' && <IntegrationsPane />}
           {tab === 'donnees' && <DonneesPane />}
           {tab === 'rgpd' && <RgpdPane />}
+          {tab === 'conformite' && <ConformitePane />}
           {tab === 'ai' && <AiUsagePane />}
           {tab === 'securite' && <SecuritePane />}
           {tab === 'apparence' && <AppearancePane />}
