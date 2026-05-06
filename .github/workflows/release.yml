@@ -152,18 +152,20 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Setup SSH for VPS
+      - name: Setup SSH agent (cross-platform robust)
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known_hosts
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
         shell: bash
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Upload MSI + sig to VPS
+      - name: Upload MSI + sig + latest.json to VPS
         env:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -171,7 +173,8 @@ jobs:
         shell: bash
         run: |
           DIR="${VPS_RELEASES_DIR:-/opt/apolline-releases}"
-          scp -i ~/.ssh/id_ed25519 \
+          # ssh-agent est déjà chargé via webfactory action — pas besoin de -i
+          scp \
             "${{ steps.artifact.outputs.msi_path }}" \
             "${{ steps.artifact.outputs.sig_path }}" \
             latest.json \
