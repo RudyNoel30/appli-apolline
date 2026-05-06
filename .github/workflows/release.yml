@@ -1,0 +1,204 @@
+name: Build & Release MSI
+
+# Déclencheur : push d'un tag de version (ex: v0.1.71)
+#   git tag v0.1.71
+#   git push origin v0.1.71
+#
+# Workflow :
+#   1. Build du MSI signé (clé Tauri stockée dans les secrets)
+#   2. Upload comme asset sur la GitHub Release du tag
+#   3. Upload sur le VPS Hostinger (/opt/apolline-releases/)
+#   4. Génération + upload de latest.json (pour l'updater Tauri)
+#
+# Au final : les utilisateurs Apolline reçoivent l'update automatiquement
+# au démarrage suivant de l'app, sans intervention manuelle de ta part.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version à builder (ex: 0.1.71)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  # Force le target-dir Cargo dans le repo (override de .cargo/config.toml local)
+  CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Sync version in package.json + tauri.conf.json
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $pkg = Get-Content package.json -Raw
+          $pkg = $pkg -replace '("version"\s*:\s*")[^"]+(")', ('${1}' + $version + '${2}')
+          [System.IO.File]::WriteAllText("$PWD\package.json", $pkg, [System.Text.UTF8Encoding]::new($false))
+
+          $conf = Get-Content src-tauri/tauri.conf.json -Raw
+          $conf = $conf -replace '("version"\s*:\s*")[^"]+(")', ('${1}' + $version + '${2}')
+          [System.IO.File]::WriteAllText("$PWD\src-tauri\tauri.conf.json", $conf, [System.Text.UTF8Encoding]::new($false))
+
+          Write-Host "Versions sync'd to $version"
+
+      - name: Build & sign Tauri MSI
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri:build
+
+      - name: Locate MSI artifact
+        id: artifact
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $bundleDir = "src-tauri\target\release\bundle\msi"
+          $msi = Get-ChildItem -Path $bundleDir -Filter "Extrapol_${version}_x64_*.msi" | Select-Object -First 1
+          $sig = Get-ChildItem -Path $bundleDir -Filter "Extrapol_${version}_x64_*.msi.sig" | Select-Object -First 1
+          if (-not $msi -or -not $sig) {
+            Write-Error "MSI ou .sig introuvable. Contenu du dossier:"
+            Get-ChildItem -Path $bundleDir
+            exit 1
+          }
+          echo "msi_path=$($msi.FullName)" >> $env:GITHUB_OUTPUT
+          echo "msi_name=$($msi.Name)" >> $env:GITHUB_OUTPUT
+          echo "sig_path=$($sig.FullName)" >> $env:GITHUB_OUTPUT
+          echo "sig_name=$($sig.Name)" >> $env:GITHUB_OUTPUT
+          $sigContent = Get-Content $sig.FullName -Raw
+          $sigContent = $sigContent.Trim()
+          # Encode multi-ligne pour GITHUB_OUTPUT
+          $delimiter = "EOF_$(Get-Random)"
+          echo "sig_content<<$delimiter" >> $env:GITHUB_OUTPUT
+          echo $sigContent >> $env:GITHUB_OUTPUT
+          echo $delimiter >> $env:GITHUB_OUTPUT
+          Write-Host "MSI: $($msi.Name) ($([math]::Round($msi.Length / 1MB, 1)) MB)"
+
+      - name: Generate latest.json
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $sig = "${{ steps.artifact.outputs.sig_content }}".Trim()
+          $msiName = "${{ steps.artifact.outputs.msi_name }}"
+          $pubDate = (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss') + 'Z'
+
+          $manifest = @{
+            version   = $version
+            notes     = "Release v$version"
+            pub_date  = $pubDate
+            platforms = @{
+              'windows-x86_64' = @{
+                signature = $sig
+                url       = "https://updates.apolline.groupe-apolline.eu/$msiName"
+              }
+            }
+          }
+          $json = $manifest | ConvertTo-Json -Depth 10
+          [System.IO.File]::WriteAllText("$PWD\latest.json", $json, [System.Text.UTF8Encoding]::new($false))
+          Write-Host "latest.json:"
+          Get-Content latest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ${{ steps.artifact.outputs.msi_path }}
+            ${{ steps.artifact.outputs.sig_path }}
+            latest.json
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+      - name: Setup SSH for VPS
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload MSI + sig to VPS
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_RELEASES_DIR: ${{ secrets.VPS_RELEASES_DIR }}
+        shell: bash
+        run: |
+          DIR="${VPS_RELEASES_DIR:-/opt/apolline-releases}"
+          scp -i ~/.ssh/id_ed25519 \
+            "${{ steps.artifact.outputs.msi_path }}" \
+            "${{ steps.artifact.outputs.sig_path }}" \
+            latest.json \
+            "${VPS_USER}@${VPS_HOST}:${DIR}/"
+          echo "Uploaded to ${VPS_USER}@${VPS_HOST}:${DIR}/"
+
+      - name: Commit version bump
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet package.json src-tauri/tauri.conf.json; then
+            echo "No version bump needed"
+          else
+            git add package.json src-tauri/tauri.conf.json
+            git commit -m "chore: release v${{ steps.version.outputs.version }}"
+            git push origin HEAD:main
+          fi
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "### ✅ Release v${{ steps.version.outputs.version }} publiée" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **MSI** : \`${{ steps.artifact.outputs.msi_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Release** : [voir](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Updater URL** : https://updates.apolline.groupe-apolline.eu/latest.json" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Les apps installées chez les collabs verront la mise à jour proposée au prochain démarrage." >> $GITHUB_STEP_SUMMARY
