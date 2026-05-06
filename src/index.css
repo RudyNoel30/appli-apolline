@@ -1,0 +1,374 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-ivory text-navy-900 font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1, h2, h3, h4 { @apply font-serif; }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-gold-500;
+  }
+  ::selection { @apply bg-gold-200 text-navy-900; }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl2 shadow-card border border-navy-100/60;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-raised hover:-translate-y-0.5;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gold-500 active:scale-[0.97];
+  }
+  .btn-primary {
+    @apply btn bg-navy-900 text-white hover:bg-navy-800 shadow-soft;
+  }
+  .btn-gold {
+    @apply btn bg-gold-500 text-navy-900 hover:bg-gold-400 shadow-gold;
+  }
+  .btn-ghost {
+    @apply btn text-navy-700 hover:bg-navy-50;
+  }
+  .btn-outline {
+    @apply btn border border-navy-200 text-navy-800 hover:bg-navy-50;
+  }
+  .btn-danger {
+    @apply btn text-rose-700 border border-rose-200 hover:bg-rose-50;
+  }
+  /* Variante compacte (rangées de table, listes denses) */
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  /* Bouton icône seul (cellule carrée, pas de gap) */
+  .btn-icon {
+    @apply inline-flex items-center justify-center h-8 w-8 rounded-md text-navy-500 hover:bg-navy-50 hover:text-navy-900 transition-colors focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1 active:scale-95;
+  }
+  .btn-icon-danger {
+    @apply btn-icon text-rose-500 hover:bg-rose-50 hover:text-rose-700 focus-visible:ring-rose-500;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg border border-navy-200 bg-white text-sm placeholder:text-navy-300 focus:border-gold-500 focus:ring-2 focus:ring-gold-200 outline-none transition;
+  }
+  .label {
+    @apply block text-xs font-semibold text-navy-700 uppercase tracking-wide mb-1.5;
+  }
+  /* Titre de section dans les pages (h3 dans les blocs) */
+  .section-title {
+    @apply font-serif text-base font-semibold text-navy-900;
+  }
+  /* Petit eyebrow (sur-titre) au-dessus d'un h1/h2 ou d'une zone de page */
+  .eyebrow {
+    @apply text-[11px] uppercase tracking-[0.18em] text-gold-700 font-semibold;
+  }
+  /* Sous-titre de groupe / petit label gris (utilisé pour les "kicker" en haut de table) */
+  .kicker {
+    @apply text-[10px] uppercase tracking-[0.12em] text-navy-400 font-semibold;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+  .badge-navy { @apply badge bg-navy-50 text-navy-800 border border-navy-100; }
+  .badge-gold { @apply badge bg-gold-50 text-gold-800 border border-gold-100; }
+  .badge-success { @apply badge bg-emerald-50 text-emerald-800 border border-emerald-100; }
+  .badge-warning { @apply badge bg-amber-50 text-amber-800 border border-amber-100; }
+  .badge-danger  { @apply badge bg-rose-50 text-rose-800 border border-rose-100; }
+  .kpi-value {
+    @apply font-serif text-3xl font-semibold text-navy-900 tracking-tight;
+  }
+  .divider-gold {
+    @apply h-px w-12 bg-gradient-to-r from-gold-500 to-transparent;
+  }
+  .table-th {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-navy-500 py-3 px-4 text-left bg-navy-50/50 border-b border-navy-100;
+  }
+  .table-td {
+    @apply py-3 px-4 text-sm text-navy-800 border-b border-navy-50;
+  }
+  /* Zone scrollable d'une page (pages à hauteur fixe) */
+  .page-body {
+    @apply flex-1 min-h-0 overflow-y-auto pr-2 -mr-2;
+  }
+
+  /* ─── Scroll perf : longues listes ─── */
+  /* Applique content-visibility:auto sur les items enfants directs.
+     Le navigateur skip layout/paint pour les items hors écran → scroll fluide
+     même sur centaines d'items. Le `contain-intrinsic-size: auto X` donne une
+     estimation initiale ; le navigateur mémorise la taille réelle après 1er paint. */
+  .list-fast > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 72px;
+  }
+  .list-fast-sm > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 40px;
+  }
+  .list-fast-lg > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 120px;
+  }
+
+  /* Container de scroll : isole le repaint au scrollport (n'affecte pas le reste de la page) */
+  .scroll-isolated {
+    contain: content;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Rich-text editor (composer Messagerie) — placeholder + listes/img */
+  .rich-editor:empty::before {
+    content: attr(data-placeholder);
+    color: rgb(148 163 184);
+    pointer-events: none;
+  }
+  .rich-editor img { max-width: 100%; height: auto; border-radius: 4px; margin: 4px 0; }
+  .rich-editor ul { list-style: disc; padding-left: 1.5rem; }
+  .rich-editor ol { list-style: decimal; padding-left: 1.5rem; }
+  .rich-editor a { color: #b8860b; text-decoration: underline; }
+  .rich-editor blockquote {
+    border-left: 3px solid #cbd5e1;
+    padding-left: 0.75rem;
+    color: #475569;
+    margin: 0.5rem 0;
+  }
+  .rich-editor table { border-collapse: collapse; }
+  .rich-editor td, .rich-editor th { border: 1px solid #cbd5e1; padding: 4px 8px; }
+}
+
+@layer utilities {
+  /* Délais en cascade pour animer des listes */
+  .stagger-1 { animation-delay: 40ms; }
+  .stagger-2 { animation-delay: 80ms; }
+  .stagger-3 { animation-delay: 120ms; }
+  .stagger-4 { animation-delay: 160ms; }
+  .stagger-5 { animation-delay: 200ms; }
+  .stagger-6 { animation-delay: 240ms; }
+  .stagger-7 { animation-delay: 280ms; }
+  .stagger-8 { animation-delay: 320ms; }
+
+  /* Effet press sur bouton */
+  .press { @apply active:scale-[0.97] transition-transform duration-75; }
+
+  /* Gradient animé gold pour highlights premium */
+  .shimmer-gold {
+    background: linear-gradient(
+      110deg,
+      #C9A961 0%,
+      #E5C875 20%,
+      #FBF7EC 45%,
+      #E5C875 60%,
+      #C9A961 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ─── Jarvis HUD effects ─── */
+  /* Pulse "live" indicator (gold) */
+  .jarvis-pulse {
+    box-shadow: 0 0 0 0 rgba(201, 169, 97, 0.7);
+    animation: jarvis-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes jarvis-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(201, 169, 97, 0.7); }
+    50%      { box-shadow: 0 0 0 6px rgba(201, 169, 97, 0); }
+  }
+  /* Scanline gold qui balaie le header */
+  .jarvis-scan::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(201, 169, 97, 0.6), transparent);
+    animation: jarvis-scan 4s linear infinite;
+  }
+  @keyframes jarvis-scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  /* Ambient glow gold doux derrière un élément */
+  .jarvis-glow {
+    box-shadow:
+      0 0 0 1px rgba(201, 169, 97, 0.15),
+      0 0 24px -8px rgba(201, 169, 97, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  /* Coin brackets HUD (4 angles) */
+  .jarvis-corners {
+    position: relative;
+  }
+  .jarvis-corners::before,
+  .jarvis-corners::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-color: rgba(201, 169, 97, 0.55);
+    pointer-events: none;
+  }
+  .jarvis-corners::before {
+    top: -1px; left: -1px;
+    border-top: 1px solid; border-left: 1px solid;
+  }
+  .jarvis-corners::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 1px solid; border-right: 1px solid;
+  }
+  /* Texte mono / techy */
+  .jarvis-mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: 0.02em;
+  }
+  /* Trois petits points qui pulsent — état "thinking" */
+  .jarvis-dots span {
+    display: inline-block;
+    width: 4px; height: 4px;
+    margin: 0 1px;
+    border-radius: 50%;
+    background: #C9A961;
+    animation: jarvis-dot 1.4s ease-in-out infinite both;
+  }
+  .jarvis-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .jarvis-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes jarvis-dot {
+    0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
+    40% { opacity: 1; transform: scale(1); }
+  }
+  /* Slide-in depuis la droite */
+  @keyframes jarvis-slide-in {
+    from { transform: translateX(20px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+  }
+  .jarvis-slide-in {
+    animation: jarvis-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* ===== Thèmes ===== */
+/* Theme Apolline — défaut (navy + gold) : pas d'override, c'est le thème courant */
+
+/* Theme Graphite — remplace l'or par du gris argenté, plus sobre */
+html.theme-graphite {
+  --gold-replacement-50:  #F1F5F9;
+  --gold-replacement-100: #E2E8F0;
+  --gold-replacement-200: #CBD5E1;
+  --gold-replacement-300: #94A3B8;
+  --gold-replacement-400: #64748B;
+  --gold-replacement-500: #475569;
+  --gold-replacement-600: #334155;
+  --gold-replacement-700: #1E293B;
+  --gold-replacement-800: #0F172A;
+}
+html.theme-graphite .text-gold-300 { color: var(--gold-replacement-300) !important; }
+html.theme-graphite .text-gold-400 { color: var(--gold-replacement-400) !important; }
+html.theme-graphite .text-gold-500 { color: var(--gold-replacement-500) !important; }
+html.theme-graphite .text-gold-600 { color: var(--gold-replacement-500) !important; }
+html.theme-graphite .text-gold-700 { color: var(--gold-replacement-600) !important; }
+html.theme-graphite .text-gold-800 { color: var(--gold-replacement-700) !important; }
+html.theme-graphite .bg-gold-50  { background-color: var(--gold-replacement-50) !important; }
+html.theme-graphite .bg-gold-100 { background-color: var(--gold-replacement-100) !important; }
+html.theme-graphite .bg-gold-200 { background-color: var(--gold-replacement-200) !important; }
+html.theme-graphite .bg-gold-300 { background-color: var(--gold-replacement-300) !important; }
+html.theme-graphite .bg-gold-400 { background-color: var(--gold-replacement-400) !important; }
+html.theme-graphite .bg-gold-500 { background-color: var(--gold-replacement-500) !important; }
+html.theme-graphite .border-gold-200 { border-color: var(--gold-replacement-200) !important; }
+html.theme-graphite .border-gold-300 { border-color: var(--gold-replacement-300) !important; }
+html.theme-graphite .border-gold-400 { border-color: var(--gold-replacement-400) !important; }
+html.theme-graphite .border-gold-500 { border-color: var(--gold-replacement-500) !important; }
+html.theme-graphite .ring-gold-500\/30 { --tw-ring-color: rgba(71,85,105,0.30) !important; }
+html.theme-graphite .from-gold-500 { --tw-gradient-from: var(--gold-replacement-500) !important; }
+html.theme-graphite .to-gold-300 { --tw-gradient-to: var(--gold-replacement-300) !important; }
+
+/* Theme Sombre — inverse les surfaces en dark, garde l'or pour l'accent */
+html.theme-sombre body { background: #0A0E1A; color: #E2E8F0; }
+html.theme-sombre .bg-ivory { background-color: #0A0E1A !important; }
+html.theme-sombre .bg-ivory\/60 { background-color: rgba(10,14,26,0.6) !important; }
+html.theme-sombre .bg-ivory\/50 { background-color: rgba(10,14,26,0.5) !important; }
+html.theme-sombre .bg-ivory\/40 { background-color: rgba(10,14,26,0.4) !important; }
+html.theme-sombre .bg-white { background-color: #1A1F33 !important; }
+html.theme-sombre .text-navy-900 { color: #F1F5F9 !important; }
+html.theme-sombre .text-navy-800 { color: #E2E8F0 !important; }
+html.theme-sombre .text-navy-700 { color: #CBD5E1 !important; }
+html.theme-sombre .text-navy-600 { color: #94A3B8 !important; }
+html.theme-sombre .text-navy-500 { color: #94A3B8 !important; }
+html.theme-sombre .text-navy-400 { color: #64748B !important; }
+html.theme-sombre .text-navy-300 { color: #475569 !important; }
+html.theme-sombre .border-navy-50 { border-color: rgba(255,255,255,0.05) !important; }
+html.theme-sombre .border-navy-100 { border-color: rgba(255,255,255,0.08) !important; }
+html.theme-sombre .border-navy-100\/60 { border-color: rgba(255,255,255,0.06) !important; }
+html.theme-sombre .border-navy-200 { border-color: rgba(255,255,255,0.1) !important; }
+html.theme-sombre .bg-navy-50 { background-color: rgba(255,255,255,0.04) !important; }
+html.theme-sombre .bg-navy-50\/40 { background-color: rgba(255,255,255,0.02) !important; }
+html.theme-sombre .bg-navy-50\/50 { background-color: rgba(255,255,255,0.03) !important; }
+html.theme-sombre .bg-navy-50\/60 { background-color: rgba(255,255,255,0.04) !important; }
+html.theme-sombre .bg-navy-100 { background-color: rgba(255,255,255,0.08) !important; }
+html.theme-sombre .hover\:bg-navy-50:hover { background-color: rgba(255,255,255,0.04) !important; }
+html.theme-sombre .hover\:bg-white:hover { background-color: rgba(255,255,255,0.06) !important; }
+html.theme-sombre .shadow-soft,
+html.theme-sombre .shadow-card,
+html.theme-sombre .shadow-raised { box-shadow: 0 1px 3px 0 rgba(0,0,0,0.4), 0 4px 12px -2px rgba(0,0,0,0.3) !important; }
+html.theme-sombre .input { background-color: #1A1F33 !important; color: #F1F5F9 !important; border-color: rgba(255,255,255,0.1) !important; }
+html.theme-sombre ::-webkit-scrollbar-thumb { background: #334155; border-color: #0A0E1A; }
+
+/* ===== Page transitions =====
+   Note : on évite filter:blur() ici. Avec animation-fill-mode: both, la valeur
+   finale (même blur(0)) reste appliquée et force une couche GPU + un pipeline
+   de filtre à chaque paint → scroll laggué sur les listes longues. opacity +
+   transform suffisent à un fondu premium et restent GPU-accélérés sans coût
+   après l'animation. */
+.page {
+  animation: page-enter 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes page-enter {
+  0%   { opacity: 0; transform: translateY(18px) scale(0.985); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Cascade : chaque enfant direct de .page rentre avec un léger délai */
+.page > * { animation: child-enter 550ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.page > *:nth-child(1) { animation-delay: 80ms; }
+.page > *:nth-child(2) { animation-delay: 140ms; }
+.page > *:nth-child(3) { animation-delay: 200ms; }
+.page > *:nth-child(4) { animation-delay: 260ms; }
+.page > *:nth-child(5) { animation-delay: 320ms; }
+.page > *:nth-child(6) { animation-delay: 380ms; }
+.page > *:nth-child(n+7) { animation-delay: 440ms; }
+@keyframes child-enter {
+  0%   { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Barre de progression navigation en haut de la page */
+.nav-progress {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #C9A961 40%, #E5C875 60%, transparent 100%);
+  background-size: 200% 100%;
+  transform-origin: left;
+  animation: nav-progress 700ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  z-index: 100;
+  pointer-events: none;
+}
+@keyframes nav-progress {
+  0%   { transform: scaleX(0); background-position: 0% 0%; }
+  60%  { transform: scaleX(0.95); }
+  100% { transform: scaleX(1); background-position: 200% 0%; opacity: 0; }
+}
+
+/* Scrollbar navy-gold */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #BEC9DF;
+  border-radius: 8px;
+  border: 2px solid #F8F7F3;
+}
+::-webkit-scrollbar-thumb:hover { background: #8498BC; }

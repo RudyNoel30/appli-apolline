@@ -1,0 +1,31 @@
+[Unit]
+Description=Apolline Backend API (Hono + Drizzle + PostgreSQL)
+Documentation=https://github.com/groupe-apolline
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=apolline
+Group=apolline
+WorkingDirectory=/opt/apolline-backend
+EnvironmentFile=/opt/apolline-backend/.env
+ExecStart=/usr/bin/node /opt/apolline-backend/dist/src/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=apolline-api
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/apolline-backend /var/lib/apolline
+# Le dossier apolline-skills est inclus implicitement via /opt/apolline-backend
+# si tu places les skills là, sinon ajoute le path explicite ici.
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

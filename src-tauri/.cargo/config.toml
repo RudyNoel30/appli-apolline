@@ -1,0 +1,6 @@
+# Target directory déportée hors du chemin user qui contient un espace
+# ("C:\Users\Rudy NOEL\...") — résout les erreurs E0463 sur les proc-macros
+# (yoke_derive, serialize_to_javascript_impl, etc.) qui ne se chargent pas
+# correctement depuis un chemin avec espace sur Windows.
+[build]
+target-dir = "C:/apolline-build/target"

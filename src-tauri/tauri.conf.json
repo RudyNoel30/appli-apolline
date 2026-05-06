@@ -1,0 +1,66 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Extrapol",
+  "version": "0.1.70",
+  "identifier": "fr.groupe-apolline.courtage",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Extr'Apol by Apolline - Logiciel de courtage",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1180,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "theme": "Light",
+        "titleBarStyle": "Visible",
+        "useHttpsScheme": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://updates.apolline.groupe-apolline.eu/latest.json"
+      ],
+      "dialog": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2RjIxRUQyMjdGRDUyQzQKUldURVV2MG4waDd5UmpQbmg5aTAvaFcyM3JSS296WnlqbVVoOGgwMjhUanVOYnljUjZwbXI4T3cK"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": ["msi", "nsis"],
+    "publisher": "Groupe Apolline",
+    "category": "Business",
+    "shortDescription": "Plateforme de courtage en crédit immobilier",
+    "longDescription": "Extr'Apol — Logiciel de courtage propriétaire du Groupe Apolline. Gestion des dossiers clients, pipeline commercial, simulation bancaire multi-banques, étude DVF, agenda et commissions.",
+    "copyright": "© 2026 Groupe Apolline",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}

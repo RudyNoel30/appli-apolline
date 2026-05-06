@@ -1,0 +1,38 @@
+[package]
+name = "apolline"
+version = "0.1.0"
+description = "Extr'Apol — Plateforme de courtage du Groupe Apolline"
+authors = ["Groupe Apolline"]
+license = "Proprietary"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "apolline_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+# Pas de feature `devtools` → DevTools (F12) auto-activés en build debug,
+# désactivés en MSI release. C'est exactement le comportement voulu :
+# en dev (npm run tauri:dev) F12 marche, en prod les utilisateurs finaux
+# ne peuvent pas inspecter le localStorage/voir le code/ouvrir la console.
+tauri = { version = "2.10.3", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-stronghold = "2"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

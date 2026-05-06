@@ -1,0 +1,37 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions par défaut : core + dialog save + fs write",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    "dialog:allow-message",
+    "dialog:allow-confirm",
+    "fs:allow-write-text-file",
+    "fs:allow-write-file",
+    "updater:default",
+    "process:default",
+    "stronghold:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "$DOCUMENT/**"
+        },
+        {
+          "path": "$DESKTOP/**"
+        },
+        {
+          "path": "$DOWNLOAD/**"
+        }
+      ]
+    }
+  ]
+}
