@@ -219,7 +219,7 @@ export default function DossierDetail() {
                         toast(`💡 Le dossier est accordé — voulez-vous émettre la facture d'honoraires ?`, {
                           duration: 8000,
                           action: {
-                            label: 'Demander à Jarvis',
+                            label: 'Demander à Polette',
                             onClick: () => {
                               window.dispatchEvent(new CustomEvent('apolline:coworker-toggle'))
                               setTimeout(() => {

@@ -186,7 +186,7 @@ export default function CommandPalette() {
           {results.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-navy-400">
               Aucun résultat pour <strong>"{query}"</strong>
-              <div className="text-[11px] mt-1">Essayez de demander à Jarvis ↓</div>
+              <div className="text-[11px] mt-1">Essayez de demander à Polette ↓</div>
             </div>
           ) : (
             results.map((r, i) => {
@@ -218,7 +218,7 @@ export default function CommandPalette() {
             })
           )}
 
-          {/* Toujours afficher l'option "Demander à Jarvis" — utile pour les requêtes
+          {/* Toujours afficher l'option "Demander à Polette" — utile pour les requêtes
               en langage naturel ("dossiers en montage", "calcule HCSF pour 350k€", etc.)
               que la recherche fulltext ne sait pas gérer. */}
           {query.trim() && (
@@ -227,7 +227,7 @@ export default function CommandPalette() {
                 const q = query.trim()
                 setOpen(false)
                 window.dispatchEvent(new CustomEvent('apolline:coworker-toggle'))
-                // Pré-remplit le textarea Jarvis et déclenche l'envoi
+                // Pré-remplit le textarea Polette et déclenche l'envoi
                 setTimeout(() => {
                   const ta = document.querySelector<HTMLTextAreaElement>('aside textarea')
                   if (ta) {
@@ -247,9 +247,9 @@ export default function CommandPalette() {
               </span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-navy-900">
-                  Demander à Jarvis : <span className="font-normal italic text-navy-700">"{query.trim()}"</span>
+                  Demander à Polette : <span className="font-normal italic text-navy-700">"{query.trim()}"</span>
                 </div>
-                <div className="text-[11px] text-navy-500">Recherche en langage naturel · ouvre Jarvis</div>
+                <div className="text-[11px] text-navy-500">Recherche en langage naturel · ouvre Polette</div>
               </div>
               <span className="text-[10px] uppercase tracking-wider bg-gold-100 text-gold-800 rounded px-1.5 py-0.5 group-hover:bg-gold-200 transition-colors">
                 IA
@@ -261,7 +261,7 @@ export default function CommandPalette() {
         <div className="px-4 py-2 border-t border-navy-100 text-[10px] text-navy-400 flex items-center gap-3">
           <span><kbd className="bg-navy-50 border border-navy-200 rounded px-1 font-mono">↑↓</kbd> naviguer</span>
           <span><kbd className="bg-navy-50 border border-navy-200 rounded px-1 font-mono">↵</kbd> ouvrir</span>
-          <span><kbd className="bg-navy-50 border border-navy-200 rounded px-1 font-mono">Ctrl+I</kbd> Jarvis</span>
+          <span><kbd className="bg-navy-50 border border-navy-200 rounded px-1 font-mono">Ctrl+I</kbd> Polette</span>
           <span className="ml-auto">{results.length} résultats</span>
         </div>
       </div>

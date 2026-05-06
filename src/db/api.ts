@@ -678,7 +678,7 @@ export const coworker = {
     return request('POST', `/api/coworker/conversations/${encodeURIComponent(id)}/messages`, { text, uiContext, maxLevel })
   },
   /**
-   * Stream une réponse Jarvis en SSE.
+   * Stream une réponse Polette en SSE.
    * Le callback `onEvent` reçoit chaque évènement parsé.
    * Le `signal` permet d'aborter (bouton Stop côté UI).
    */

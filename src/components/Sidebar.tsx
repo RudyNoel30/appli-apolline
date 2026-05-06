@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { useStore } from '@/stores/useStore'
 import Logo from './Logo'
 
-const JARVIS_SEEN_KEY = 'apolline.jarvis_seen_v1'
+const POLETTE_SEEN_KEY = 'apolline.polette_seen_v1'
 
 const nav = [
   { to: '/', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
@@ -31,15 +31,15 @@ export default function Sidebar() {
   const pinned = useStore((s) => s.settings.sidebarPinned ?? false)
   const updateSettings = useStore((s) => s.updateSettings)
   const [open, setOpen] = useState(false)
-  const [jarvisNew, setJarvisNew] = useState(() => typeof window !== 'undefined' && !localStorage.getItem(JARVIS_SEEN_KEY))
+  const [poletteNew, setPoletteNew] = useState(() => typeof window !== 'undefined' && !localStorage.getItem(POLETTE_SEEN_KEY))
   const hideTimerRef = useRef<number | null>(null)
   const location = useLocation()
 
-  const openJarvis = () => {
+  const openPolette = () => {
     window.dispatchEvent(new CustomEvent('apolline:coworker-toggle'))
-    if (jarvisNew) {
-      localStorage.setItem(JARVIS_SEEN_KEY, new Date().toISOString())
-      setJarvisNew(false)
+    if (poletteNew) {
+      localStorage.setItem(POLETTE_SEEN_KEY, new Date().toISOString())
+      setPoletteNew(false)
     }
   }
 
@@ -169,21 +169,21 @@ export default function Sidebar() {
         </nav>
 
         <div className="p-3 border-t border-navy-800/60 space-y-0.5 relative z-10">
-          {/* Jarvis — assistant IA conversationnel (Ctrl+I) */}
+          {/* Polette — assistant IA conversationnel (Ctrl+I) */}
           <button
             type="button"
-            onClick={openJarvis}
-            title="Jarvis · assistant IA (Ctrl+I)"
+            onClick={openPolette}
+            title="Polette · assistant IA (Ctrl+I)"
             className="group relative w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 text-navy-200 hover:bg-gold-500/10 hover:text-gold-300 hover:translate-x-0.5"
           >
             <Sparkles className="h-4 w-4 text-gold-400 group-hover:text-gold-300 group-hover:scale-110 transition-all" />
-            <span className="font-medium">Jarvis</span>
-            {jarvisNew ? (
-              <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-[0.12em] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/40 jarvis-pulse">
+            <span className="font-medium">Polette</span>
+            {poletteNew ? (
+              <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-[0.12em] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/40 polette-pulse">
                 Nouveau
               </span>
             ) : (
-              <span className="ml-auto jarvis-mono text-[9px] text-navy-400 group-hover:text-gold-400/70 transition-colors">
+              <span className="ml-auto polette-mono text-[9px] text-navy-400 group-hover:text-gold-400/70 transition-colors">
                 Ctrl+I
               </span>
             )}

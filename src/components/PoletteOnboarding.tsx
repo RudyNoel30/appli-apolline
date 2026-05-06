@@ -1,16 +1,16 @@
 /**
- * JarvisOnboarding — modale de bienvenue qui présente Jarvis au 1er login
+ * PoletteOnboarding — modale de bienvenue qui présente Polette au 1er login
  * après la mise à jour qui l'introduit (v0.1.61).
  *
- * Affichée 1 fois par utilisateur (flag localStorage `apolline.jarvis_onboarded`).
+ * Affichée 1 fois par utilisateur (flag localStorage `apolline.polette_onboarded`).
  * 2 écrans : présentation + 4 exemples cliquables qui pré-remplissent un message
- * dans le panneau Jarvis.
+ * dans le panneau Polette.
  */
 import { useEffect, useState } from 'react'
 import { Sparkles, X, ArrowRight, MessageSquareText, FileText, BarChart3, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const ONBOARD_KEY = 'apolline.jarvis_onboarded'
+const ONBOARD_KEY = 'apolline.polette_onboarded'
 
 type Suggestion = { icon: typeof Sparkles; text: string; example: string }
 
@@ -21,7 +21,7 @@ const SUGGESTIONS: Suggestion[] = [
   { icon: BarChart3, text: 'Calcul HCSF', example: 'Calcule l\'endettement pour 350k€ sur 25 ans à 3,4% avec 4500€/mois' },
 ]
 
-export default function JarvisOnboarding() {
+export default function PoletteOnboarding() {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
 
@@ -42,7 +42,7 @@ export default function JarvisOnboarding() {
 
   const tryExample = (example: string) => {
     close()
-    // Ouvre Jarvis et pré-remplit le textarea
+    // Ouvre Polette et pré-remplit le textarea
     window.dispatchEvent(new CustomEvent('apolline:coworker-toggle'))
     setTimeout(() => {
       const ta = document.querySelector<HTMLTextAreaElement>('aside textarea')
@@ -66,7 +66,7 @@ export default function JarvisOnboarding() {
 
       <div
         className={cn(
-          'relative w-full max-w-lg rounded-2xl text-navy-100 jarvis-slide-in jarvis-corners overflow-hidden',
+          'relative w-full max-w-lg rounded-2xl text-navy-100 polette-slide-in polette-corners overflow-hidden',
           'bg-gradient-to-b from-navy-950 via-[#0d1c3a] to-navy-950',
           'border border-gold-500/30',
           'shadow-[0_0_60px_-12px_rgba(201,169,97,0.4)]'
@@ -94,10 +94,10 @@ export default function JarvisOnboarding() {
           <div className="p-8 text-center">
             <div className="inline-flex relative h-16 w-16 rounded-2xl items-center justify-center mb-5 bg-gradient-to-br from-gold-500/30 to-gold-700/10 border border-gold-500/40 shadow-[0_0_30px_-6px_rgba(201,169,97,0.6)]">
               <Sparkles className="h-7 w-7 text-gold-400" />
-              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 jarvis-pulse" />
+              <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 polette-pulse" />
             </div>
             <div className="kicker text-gold-400/70 mb-2">Nouveauté · v0.1.61</div>
-            <h2 className="font-serif text-2xl text-white mb-2">Bonjour, je suis Jarvis</h2>
+            <h2 className="font-serif text-2xl text-white mb-2">Bonjour, je suis Polette</h2>
             <p className="text-sm text-navy-200/90 mb-6 max-w-md mx-auto leading-relaxed">
               Votre nouvel assistant IA intégré à Extr'Apol. Je peux <strong className="text-gold-300">consulter et modifier vos dossiers</strong>, <strong className="text-gold-300">lancer vos skills Apolline</strong> (DDP, dossier banquier, étude client R1…) et <strong className="text-gold-300">répondre à vos questions métier</strong> (HCSF, taux, calculs).
             </p>
@@ -109,7 +109,7 @@ export default function JarvisOnboarding() {
               ].map((s) => (
                 <div key={s.label} className="rounded-lg bg-navy-900/60 border border-gold-500/15 p-2.5">
                   <div className="font-serif text-base text-gold-300">{s.label}</div>
-                  <div className="text-[10px] text-navy-300/70 jarvis-mono uppercase tracking-[0.1em]">{s.sub}</div>
+                  <div className="text-[10px] text-navy-300/70 polette-mono uppercase tracking-[0.1em]">{s.sub}</div>
                 </div>
               ))}
             </div>
@@ -119,8 +119,8 @@ export default function JarvisOnboarding() {
             >
               Voir des exemples <ArrowRight className="h-4 w-4" />
             </button>
-            <div className="mt-4 text-[10px] jarvis-mono text-navy-400/70 uppercase tracking-[0.12em]">
-              <span className="text-gold-400/60">›</span> Ouvrez Jarvis à tout moment avec <kbd className="px-1.5 py-0.5 rounded bg-navy-800/80 border border-gold-500/20 text-gold-300">Ctrl+I</kbd>
+            <div className="mt-4 text-[10px] polette-mono text-navy-400/70 uppercase tracking-[0.12em]">
+              <span className="text-gold-400/60">›</span> Ouvrez Polette à tout moment avec <kbd className="px-1.5 py-0.5 rounded bg-navy-800/80 border border-gold-500/20 text-gold-300">Ctrl+I</kbd>
             </div>
           </div>
         ) : (
@@ -141,7 +141,7 @@ export default function JarvisOnboarding() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-white">{s.text}</div>
-                    <div className="text-[11px] text-navy-300/80 mt-0.5 jarvis-mono"><span className="text-gold-400/60">› </span>{s.example}</div>
+                    <div className="text-[11px] text-navy-300/80 mt-0.5 polette-mono"><span className="text-gold-400/60">› </span>{s.example}</div>
                   </div>
                   <ArrowRight className="h-4 w-4 text-gold-400/40 group-hover:text-gold-400 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
                 </button>
@@ -153,7 +153,7 @@ export default function JarvisOnboarding() {
               </button>
               <button
                 onClick={close}
-                className="text-xs jarvis-mono text-navy-400 hover:text-gold-300 uppercase tracking-[0.12em] transition-colors"
+                className="text-xs polette-mono text-navy-400 hover:text-gold-300 uppercase tracking-[0.12em] transition-colors"
               >
                 Fermer
               </button>

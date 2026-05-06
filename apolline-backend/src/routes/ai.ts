@@ -153,7 +153,7 @@ aiRoute.get('/usage', authMiddleware, async (c) => {
     type Entry = {
       id: string; ts: string; userId: string | null; userEmail: string | null;
       skill: string; cost: number; tokensIn: number; tokensOut: number; model: string;
-      /** 'skill' = bouton IA classique, 'coworker' = générée via le panneau Jarvis */
+      /** 'skill' = bouton IA classique, 'coworker' = générée via le panneau Polette */
       via: 'skill' | 'coworker';
     }
     const entries: Entry[] = []
@@ -181,7 +181,7 @@ aiRoute.get('/usage', authMiddleware, async (c) => {
       })
     }
 
-    // Top tools utilisés par Jarvis (depuis audit_log entityType='coworker_tool_call')
+    // Top tools utilisés par Polette (depuis audit_log entityType='coworker_tool_call')
     const toolResult = await db.execute(sql`
       SELECT details
       FROM audit_log

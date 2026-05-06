@@ -103,7 +103,7 @@ export default function AiUsagePane() {
               <Kpi label="Projection 30 j" value={projection != null ? eur4(projection) : '—'} hint="Au rythme actuel" accent={(projection ?? 0) > 30 ? 'rose' : 'navy'} />
             </div>
 
-            {/* Split Skills classiques vs Jarvis (Coworker) + Top tools Jarvis */}
+            {/* Split Skills classiques vs Polette (Coworker) + Top tools Polette */}
             {stats.split && (
               <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="rounded-xl border border-navy-100 bg-gradient-to-br from-navy-50/60 to-white p-3">
@@ -116,7 +116,7 @@ export default function AiUsagePane() {
                 <div className="rounded-xl border border-gold-200 bg-gradient-to-br from-gold-50 to-white p-3 relative overflow-hidden">
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-500 to-transparent" />
                   <div className="kicker text-gold-700 mb-1.5 flex items-center gap-1">
-                    <Sparkles className="h-2.5 w-2.5" /> Jarvis (Coworker)
+                    <Sparkles className="h-2.5 w-2.5" /> Polette (Coworker)
                   </div>
                   <div className="font-serif text-2xl text-gold-900 tabular-nums">{eur4(stats.split.coworker.cost)}</div>
                   <div className="text-[11px] text-navy-600 mt-0.5">
@@ -125,7 +125,7 @@ export default function AiUsagePane() {
                 </div>
                 {stats.topTools && stats.topTools.length > 0 ? (
                   <div className="rounded-xl border border-navy-100 bg-white p-3">
-                    <div className="kicker mb-1.5">Top tools Jarvis</div>
+                    <div className="kicker mb-1.5">Top tools Polette</div>
                     <div className="space-y-1 mt-1">
                       {stats.topTools.slice(0, 4).map((t) => (
                         <div key={t.name} className="flex items-center justify-between text-[11px] font-mono">
@@ -138,7 +138,7 @@ export default function AiUsagePane() {
                 ) : (
                   <div className="rounded-xl border border-navy-100 bg-white p-3 flex items-center justify-center">
                     <div className="text-[11px] text-navy-400 italic text-center">
-                      Aucun tool Jarvis<br />utilisé sur la période
+                      Aucun tool Polette<br />utilisé sur la période
                     </div>
                   </div>
                 )}

@@ -1,5 +1,5 @@
 /**
- * Jarvis — panneau latéral d'assistant Claude conversationnel.
+ * Polette — panneau latéral d'assistant Claude conversationnel.
  *
  * - Ouvert / fermé via Ctrl+I (ou ⌘+I sur Mac), ou via le bouton flottant en bas à droite
  * - Affiche la conversation courante (messages user/assistant + résumés des tools appelés)
@@ -8,7 +8,7 @@
  *
  * Note interne : les routes/tables s'appellent encore `coworker_*` côté backend
  * (techniquement plus simple à laisser en l'état). C'est juste l'identité affichée
- * et le nom utilisé par Claude qui est "Jarvis".
+ * et le nom utilisé par Claude qui est "Polette".
  */
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
@@ -87,7 +87,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
           setMessages([])
         }
       } catch (e) {
-        toast.error('Impossible de charger Jarvis', { description: e instanceof Error ? e.message : String(e) })
+        toast.error('Impossible de charger Polette', { description: e instanceof Error ? e.message : String(e) })
       } finally {
         if (!cancelled) setLoadingConv(false)
       }
@@ -180,7 +180,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
             // Reset texte intermédiaire car Claude va probablement reprendre la parole
             setLiveText('')
           } else if (e.event === 'error') {
-            toast.error('Erreur Jarvis', { description: e.data.message.slice(0, 200) })
+            toast.error('Erreur Polette', { description: e.data.message.slice(0, 200) })
           }
           // 'usage' et 'done' : on attend la fin du stream pour reload BDD
         },
@@ -196,7 +196,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
         // On garde le message user mais retire l'optimiste si pas encore confirmé
       } else {
         const msg = e instanceof Error ? e.message : String(e)
-        toast.error('Échec Jarvis', { description: msg.slice(0, 200) })
+        toast.error('Échec Polette', { description: msg.slice(0, 200) })
       }
       // Recharge l'état BDD (peut contenir le user message mais pas la réponse)
       try {
@@ -271,7 +271,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
             })
             setLiveText('')
           } else if (e.event === 'error') {
-            toast.error('Erreur Jarvis', { description: e.data.message.slice(0, 200) })
+            toast.error('Erreur Polette', { description: e.data.message.slice(0, 200) })
           }
         },
       })
@@ -280,7 +280,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
       setConv(detail.conversation)
     } catch (e) {
       if (!(e instanceof Error && e.name === 'AbortError')) {
-        toast.error('Échec Jarvis', { description: e instanceof Error ? e.message.slice(0, 200) : String(e) })
+        toast.error('Échec Polette', { description: e instanceof Error ? e.message.slice(0, 200) : String(e) })
       }
       try {
         const detail = await coworker.getConversation(conv.id)
@@ -316,7 +316,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
           'bg-gradient-to-b from-navy-950 via-[#0d1c3a] to-navy-950',
           'border-l border-gold-500/25',
           'shadow-[-12px_0_60px_-20px_rgba(0,0,0,0.6),_inset_1px_0_0_rgba(201,169,97,0.08)]',
-          'jarvis-slide-in'
+          'polette-slide-in'
         )}
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -331,17 +331,17 @@ export default function CoworkerPanel({ open, onClose }: Props) {
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-500/70 to-transparent pointer-events-none" />
 
         {/* Header */}
-        <header className="relative flex items-center gap-2.5 px-4 py-3 border-b border-gold-500/15 bg-navy-950/40 jarvis-scan overflow-hidden">
+        <header className="relative flex items-center gap-2.5 px-4 py-3 border-b border-gold-500/15 bg-navy-950/40 polette-scan overflow-hidden">
           <div className="relative h-9 w-9 rounded-lg bg-gradient-to-br from-gold-500 to-gold-700 flex items-center justify-center shadow-[0_0_14px_-2px_rgba(201,169,97,0.6)]">
             <Sparkles className="h-4 w-4 text-navy-950" />
-            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-navy-950 jarvis-pulse" />
+            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-navy-950 polette-pulse" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-serif text-[15px] text-white leading-none tracking-wide">Jarvis</span>
-              <span className="jarvis-mono text-[9px] text-gold-400/80 uppercase tracking-[0.18em]">v1 · online</span>
+              <span className="font-serif text-[15px] text-white leading-none tracking-wide">Polette</span>
+              <span className="polette-mono text-[9px] text-gold-400/80 uppercase tracking-[0.18em]">v1 · online</span>
             </div>
-            <div className="text-[10px] text-navy-300/70 truncate jarvis-mono mt-0.5">
+            <div className="text-[10px] text-navy-300/70 truncate polette-mono mt-0.5">
               <span className="text-gold-400/60">›</span>{' '}
               {view === 'history' ? 'historique' : conv?.title || 'nouvelle session'}
               {conv && view === 'chat' && (
@@ -371,7 +371,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
               <ChevronLeft className="h-4 w-4" />
             </button>
           )}
-          <button onClick={onClose} className="h-8 w-8 rounded-md hover:bg-rose-500/15 flex items-center justify-center text-navy-300 hover:text-rose-300 transition-colors" title="Fermer Jarvis (Ctrl+I)">
+          <button onClick={onClose} className="h-8 w-8 rounded-md hover:bg-rose-500/15 flex items-center justify-center text-navy-300 hover:text-rose-300 transition-colors" title="Fermer Polette (Ctrl+I)">
             <X className="h-4 w-4" />
           </button>
         </header>
@@ -380,7 +380,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
         {view === 'history' ? (
           <div className="flex-1 overflow-y-auto p-3 space-y-1">
             {history.length === 0 ? (
-              <div className="text-sm text-navy-300/60 text-center py-8 jarvis-mono">— aucune session —</div>
+              <div className="text-sm text-navy-300/60 text-center py-8 polette-mono">— aucune session —</div>
             ) : (
               history.map((c) => (
                 <button
@@ -393,7 +393,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
                   )}
                 >
                   <div className="text-sm font-medium text-white truncate">{c.title}</div>
-                  <div className="text-[10px] text-navy-300/70 flex items-center gap-2 jarvis-mono mt-0.5">
+                  <div className="text-[10px] text-navy-300/70 flex items-center gap-2 polette-mono mt-0.5">
                     <span>{new Date(c.updatedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                     <span className="text-gold-400/40">|</span>
                     <span className="text-gold-400/80">{(c.cumulativeCostEur || 0).toFixed(3)} €</span>
@@ -424,16 +424,16 @@ export default function CoworkerPanel({ open, onClose }: Props) {
               )}
               {/* Streaming en direct : tools en cours + texte qui s'écrit */}
               {sending && (liveTools.length > 0 || liveText) && (
-                <div className="jarvis-slide-in flex justify-start">
+                <div className="polette-slide-in flex justify-start">
                   <div className="max-w-[85%] rounded-lg px-3.5 py-2 text-sm leading-relaxed border bg-navy-900/70 text-navy-100 border-gold-500/15 rounded-bl-sm backdrop-blur-sm">
-                    <div className="flex items-center gap-1.5 mb-1.5 jarvis-mono text-[9px] text-gold-400/70 uppercase tracking-[0.12em]">
+                    <div className="flex items-center gap-1.5 mb-1.5 polette-mono text-[9px] text-gold-400/70 uppercase tracking-[0.12em]">
                       <Sparkles className="h-2.5 w-2.5" />
-                      <span>jarvis</span>
+                      <span>polette</span>
                       <span className="text-gold-400/30">›</span>
-                      <span className="jarvis-dots inline-flex"><span /><span /><span /></span>
+                      <span className="polette-dots inline-flex"><span /><span /><span /></span>
                     </div>
                     {liveTools.map((t, i) => (
-                      <div key={i} className="flex items-center gap-1.5 my-1 text-[10px] jarvis-mono">
+                      <div key={i} className="flex items-center gap-1.5 my-1 text-[10px] polette-mono">
                         {t.status === 'running' ? (
                           <Loader2 className="h-2.5 w-2.5 animate-spin text-gold-400" />
                         ) : t.status === 'ok' ? (
@@ -454,9 +454,9 @@ export default function CoworkerPanel({ open, onClose }: Props) {
                 </div>
               )}
               {sending && liveTools.length === 0 && !liveText && (
-                <div className="flex items-center gap-2 text-xs px-2 jarvis-mono text-gold-400/80">
-                  <span>Jarvis traite</span>
-                  <span className="jarvis-dots inline-flex"><span /><span /><span /></span>
+                <div className="flex items-center gap-2 text-xs px-2 polette-mono text-gold-400/80">
+                  <span>Polette traite</span>
+                  <span className="polette-dots inline-flex"><span /><span /><span /></span>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -468,19 +468,19 @@ export default function CoworkerPanel({ open, onClose }: Props) {
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-500/40 to-transparent pointer-events-none" />
 
               <div className={cn(
-                'flex items-end gap-2 rounded-lg border bg-navy-900/60 transition-all p-2 jarvis-corners',
+                'flex items-end gap-2 rounded-lg border bg-navy-900/60 transition-all p-2 polette-corners',
                 'border-gold-500/20 focus-within:border-gold-500/60',
                 'focus-within:shadow-[0_0_18px_-4px_rgba(201,169,97,0.4)]'
               )}>
-                <span className="jarvis-mono text-gold-400/80 text-sm pt-1.5 pl-1 select-none">›</span>
+                <span className="polette-mono text-gold-400/80 text-sm pt-1.5 pl-1 select-none">›</span>
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={onKeyDown}
-                  placeholder="demande à Jarvis…"
+                  placeholder="demande à Polette…"
                   rows={1}
-                  className="flex-1 bg-transparent border-0 outline-none resize-none text-sm text-white placeholder:text-navy-300/40 placeholder:jarvis-mono max-h-32 py-1"
+                  className="flex-1 bg-transparent border-0 outline-none resize-none text-sm text-white placeholder:text-navy-300/40 placeholder:polette-mono max-h-32 py-1"
                   disabled={sending || !conv}
                 />
                 {sending ? (
@@ -507,7 +507,7 @@ export default function CoworkerPanel({ open, onClose }: Props) {
                   </button>
                 )}
               </div>
-              <div className="text-[9px] mt-1.5 px-1 flex items-center justify-between jarvis-mono uppercase tracking-[0.12em]">
+              <div className="text-[9px] mt-1.5 px-1 flex items-center justify-between polette-mono uppercase tracking-[0.12em]">
                 <span className="text-navy-300/60">sonnet 4.6 · ~0,05–0,30 € / session</span>
                 <span className="text-gold-400/60">tools · lvl 3</span>
               </div>
@@ -532,10 +532,10 @@ function EmptyState() {
     <div className="text-center py-8 px-4">
       <div className="inline-flex relative h-14 w-14 rounded-xl items-center justify-center mb-4 bg-gradient-to-br from-gold-500/20 to-gold-700/5 border border-gold-500/30 shadow-[0_0_30px_-8px_rgba(201,169,97,0.5)]">
         <Sparkles className="h-6 w-6 text-gold-400" />
-        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-400 jarvis-pulse" />
+        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-400 polette-pulse" />
       </div>
-      <h3 className="font-serif text-lg text-white mb-1">Bonjour, je suis Jarvis</h3>
-      <p className="text-xs text-navy-300/70 mb-1 jarvis-mono uppercase tracking-[0.12em]">— votre majordome numérique —</p>
+      <h3 className="font-serif text-lg text-white mb-1">Bonjour, je suis Polette</h3>
+      <p className="text-xs text-navy-300/70 mb-1 polette-mono uppercase tracking-[0.12em]">— votre assistante Apolline —</p>
       <p className="text-xs text-navy-200/80 mb-6 max-w-xs mx-auto">Je vois vos dossiers, je peux les modifier, lancer les skills Apolline et répondre à vos questions métier.</p>
       <div className="space-y-1.5 text-left max-w-sm mx-auto">
         <div className="kicker pl-1 text-gold-400/70">Suggestions</div>
@@ -548,7 +548,7 @@ function EmptyState() {
             }}
             className="block w-full text-left text-sm px-3 py-2 rounded-md text-navy-100 border border-gold-500/15 bg-navy-900/40 hover:bg-gold-500/[0.06] hover:border-gold-500/40 transition-all"
           >
-            <span className="jarvis-mono text-gold-400/60 mr-2">›</span>{s}
+            <span className="polette-mono text-gold-400/60 mr-2">›</span>{s}
           </button>
         ))}
       </div>
@@ -576,18 +576,18 @@ function MessageBubble({ message, resolved, onConfirm, onCancel }: MessageBubble
     if (parsed && typeof parsed === 'object' && parsed !== null && 'needs_confirmation' in parsed && (parsed as { needs_confirmation: boolean }).needs_confirmation) {
       const pending = parsed as PendingConfirmation
       return (
-        <div className="jarvis-slide-in flex justify-start">
-          <div className="max-w-[90%] rounded-lg p-3.5 border bg-gradient-to-br from-gold-500/10 to-amber-500/5 border-gold-500/40 shadow-[0_0_18px_-4px_rgba(201,169,97,0.5)] jarvis-corners">
-            <div className="flex items-center gap-1.5 mb-2 jarvis-mono text-[9px] text-gold-400 uppercase tracking-[0.14em]">
+        <div className="polette-slide-in flex justify-start">
+          <div className="max-w-[90%] rounded-lg p-3.5 border bg-gradient-to-br from-gold-500/10 to-amber-500/5 border-gold-500/40 shadow-[0_0_18px_-4px_rgba(201,169,97,0.5)] polette-corners">
+            <div className="flex items-center gap-1.5 mb-2 polette-mono text-[9px] text-gold-400 uppercase tracking-[0.14em]">
               <Sparkles className="h-2.5 w-2.5" />
               <span>action sensible · confirmation requise</span>
             </div>
             <div className="text-sm text-white mb-1 leading-relaxed">{pending.summary}</div>
-            <div className="text-[10px] jarvis-mono text-gold-400/70 uppercase tracking-[0.12em] mb-3">
+            <div className="text-[10px] polette-mono text-gold-400/70 uppercase tracking-[0.12em] mb-3">
               <span className="text-gold-400/50">›</span> tool : {pending.action}
             </div>
             {resolved ? (
-              <div className="text-[11px] jarvis-mono text-navy-300/70 uppercase tracking-[0.12em] flex items-center gap-1.5">
+              <div className="text-[11px] polette-mono text-navy-300/70 uppercase tracking-[0.12em] flex items-center gap-1.5">
                 <span className="text-emerald-400">✓</span> traité
               </div>
             ) : (
@@ -612,7 +612,7 @@ function MessageBubble({ message, resolved, onConfirm, onCancel }: MessageBubble
     }
 
     return (
-      <div className="ml-3 text-[10px] flex items-start gap-1.5 jarvis-mono">
+      <div className="ml-3 text-[10px] flex items-start gap-1.5 polette-mono">
         <span className={cn('mt-0.5 shrink-0', c.is_error ? 'text-rose-400' : 'text-emerald-400')}>
           {c.is_error ? '✗' : '✓'}
         </span>
@@ -641,7 +641,7 @@ function MessageBubble({ message, resolved, onConfirm, onCancel }: MessageBubble
       : []
 
   return (
-    <div className={cn('flex jarvis-slide-in', isUser ? 'justify-end' : 'justify-start')}>
+    <div className={cn('flex polette-slide-in', isUser ? 'justify-end' : 'justify-start')}>
       <div className={cn(
         'max-w-[85%] rounded-lg px-3.5 py-2 text-sm leading-relaxed border',
         isUser
@@ -649,9 +649,9 @@ function MessageBubble({ message, resolved, onConfirm, onCancel }: MessageBubble
           : 'bg-navy-900/70 text-navy-100 border-gold-500/15 rounded-bl-sm backdrop-blur-sm'
       )}>
         {!isUser && (
-          <div className="flex items-center gap-1.5 mb-1 jarvis-mono text-[9px] text-gold-400/70 uppercase tracking-[0.12em]">
+          <div className="flex items-center gap-1.5 mb-1 polette-mono text-[9px] text-gold-400/70 uppercase tracking-[0.12em]">
             <Sparkles className="h-2.5 w-2.5" />
-            <span>jarvis</span>
+            <span>polette</span>
             <span className="text-gold-400/30">›</span>
           </div>
         )}
@@ -659,7 +659,7 @@ function MessageBubble({ message, resolved, onConfirm, onCancel }: MessageBubble
           if (b.type === 'text') return <MarkdownText key={i} text={b.text} dark />
           if (b.type === 'tool_use') {
             return (
-              <span key={i} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded mr-1 my-0.5 bg-gold-500/10 text-gold-300 border border-gold-500/30 jarvis-mono">
+              <span key={i} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded mr-1 my-0.5 bg-gold-500/10 text-gold-300 border border-gold-500/30 polette-mono">
                 <Wrench className="h-2.5 w-2.5" />
                 {b.name}
               </span>
@@ -668,7 +668,7 @@ function MessageBubble({ message, resolved, onConfirm, onCancel }: MessageBubble
           return null
         })}
         {!isUser && message.meta?.costEur ? (
-          <div className="mt-2 text-[9px] text-navy-400/70 border-t border-gold-500/10 pt-1.5 jarvis-mono uppercase tracking-[0.1em] flex items-center gap-1.5">
+          <div className="mt-2 text-[9px] text-navy-400/70 border-t border-gold-500/10 pt-1.5 polette-mono uppercase tracking-[0.1em] flex items-center gap-1.5">
             <span className="text-gold-400/50">›</span>
             <span>{message.meta.inputTokens?.toLocaleString('fr-FR')}/{message.meta.outputTokens?.toLocaleString('fr-FR')} tk</span>
             <span className="text-gold-400/30">|</span>
@@ -701,7 +701,7 @@ function renderMarkdown(md: string): string {
   // Code blocks
   const codeBlocks: string[] = []
   let body = md.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, _lang, code) => {
-    codeBlocks.push(`<pre class="bg-navy-950/80 border border-gold-500/20 text-navy-100 text-xs p-2 rounded overflow-x-auto my-1.5 jarvis-mono"><code>${escapeHtml(code)}</code></pre>`)
+    codeBlocks.push(`<pre class="bg-navy-950/80 border border-gold-500/20 text-navy-100 text-xs p-2 rounded overflow-x-auto my-1.5 polette-mono"><code>${escapeHtml(code)}</code></pre>`)
     return `CB${codeBlocks.length - 1}`
   })
   body = escapeHtml(body)
@@ -710,7 +710,7 @@ function renderMarkdown(md: string): string {
   body = body.replace(/^# (.+)$/gm, '<h1 class="font-serif text-xl mt-2 mb-1 text-gold-300">$1</h1>')
   body = body.replace(/\*\*([^*\n]+)\*\*/g, '<strong class="text-white">$1</strong>')
   body = body.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em class="text-gold-200">$2</em>')
-  body = body.replace(/`([^`\n]+)`/g, '<code class="bg-gold-500/10 text-gold-300 border border-gold-500/20 px-1 py-0.5 rounded text-[12px] jarvis-mono">$1</code>')
+  body = body.replace(/`([^`\n]+)`/g, '<code class="bg-gold-500/10 text-gold-300 border border-gold-500/20 px-1 py-0.5 rounded text-[12px] polette-mono">$1</code>')
   body = body.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-gold-400 underline hover:text-gold-300">$1</a>')
   body = body.replace(/(^(?:[-*] .+(?:\n|$))+)/gm, (block) => {
     const items = block.trim().split(/\n/).map(l => `<li class="ml-1">${l.replace(/^[-*] /, '')}</li>`).join('')

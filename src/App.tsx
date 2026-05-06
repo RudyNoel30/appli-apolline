@@ -22,7 +22,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import CommandPalette from './components/CommandPalette'
 import QuickProspectModal from './components/QuickProspectModal'
 import CoworkerPanel from './components/CoworkerPanel'
-import JarvisOnboarding from './components/JarvisOnboarding'
+import PoletteOnboarding from './components/PoletteOnboarding'
 import RgpdConsent from './components/RgpdConsent'
 import { Sparkles } from 'lucide-react'
 import { initTelemetry, setTelemetryUser } from './lib/telemetry'
@@ -540,21 +540,21 @@ export default function App() {
           <RgpdConsent />
         </div>
 
-        {/* Bouton flottant Jarvis (en bas à droite, masqué quand le panneau est ouvert) */}
+        {/* Bouton flottant Polette (en bas à droite, masqué quand le panneau est ouvert) */}
         {!coworkerOpen && (
           <button
             onClick={() => setCoworkerOpen(true)}
-            className="fixed bottom-6 right-6 z-30 h-12 w-12 rounded-full bg-gradient-to-br from-navy-900 to-navy-950 border border-gold-500/40 text-gold-400 hover:text-gold-300 hover:border-gold-500/70 shadow-[0_0_24px_-4px_rgba(201,169,97,0.5)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center group jarvis-pulse"
-            title="Jarvis (Ctrl+I)"
+            className="fixed bottom-6 right-6 z-30 h-12 w-12 rounded-full bg-gradient-to-br from-navy-900 to-navy-950 border border-gold-500/40 text-gold-400 hover:text-gold-300 hover:border-gold-500/70 shadow-[0_0_24px_-4px_rgba(201,169,97,0.5)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center group polette-pulse"
+            title="Polette (Ctrl+I)"
           >
             <Sparkles className="h-5 w-5" />
-            <span className="absolute right-full mr-3 bg-navy-950 border border-gold-500/30 text-gold-300 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none jarvis-mono uppercase tracking-[0.12em]">
-              Jarvis · Ctrl+I
+            <span className="absolute right-full mr-3 bg-navy-950 border border-gold-500/30 text-gold-300 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none polette-mono uppercase tracking-[0.12em]">
+              Polette · Ctrl+I
             </span>
           </button>
         )}
         <CoworkerPanel open={coworkerOpen} onClose={() => setCoworkerOpen(false)} />
-        <JarvisOnboarding />
+        <PoletteOnboarding />
       </div>
       {updateModal}
     </>
