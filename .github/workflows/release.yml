@@ -198,10 +198,108 @@ jobs:
       - name: Summary
         shell: bash
         run: |
-          echo "### ✅ Release v${{ steps.version.outputs.version }} publiée" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Frontend MSI v${{ steps.version.outputs.version }} publié" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **MSI** : \`${{ steps.artifact.outputs.msi_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **GitHub Release** : [voir](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
           echo "- **Updater URL** : https://updates.apolline.groupe-apolline.eu/latest.json" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Les apps installées chez les collabs verront la mise à jour proposée au prochain démarrage." >> $GITHUB_STEP_SUMMARY
+          echo "Le déploiement backend tourne en parallèle (job deploy-backend)." >> $GITHUB_STEP_SUMMARY
+
+  # ────────────────────────────────────────────────────────────────────
+  # JOB 2 — Déploiement du backend (Hono + Drizzle) sur le VPS
+  # ────────────────────────────────────────────────────────────────────
+  # Tourne en parallèle du build MSI sur Linux runner (rsync natif).
+  # Sync src/, drizzle/, package.json → applique migrations → rebuild → restart.
+  # Migrations idempotentes (toutes utilisent IF NOT EXISTS) donc on peut
+  # toutes les ré-appliquer sans risque.
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    # Tourne en parallèle du build front — pas de dépendance.
+    # Si on voulait conditionnel, on pourrait ajouter needs: build mais
+    # ça allongerait le délai total.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known_hosts
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync backend code to VPS
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          # Sync ciblé : src + migrations + manifests + tsconfig.
+          # On NE supprime PAS de fichiers (-a sans --delete) pour ne
+          # pas effacer ce qui est légitimement présent côté VPS (.env, dist/, …).
+          # node_modules sur le VPS est conservé tel quel — npm ci s'occupera de l'aligner si besoin.
+          rsync -avz \
+            --exclude='node_modules/' \
+            --exclude='dist/' \
+            --exclude='.env*' \
+            apolline-backend/src/ \
+            "$VPS_USER@$VPS_HOST:/opt/apolline-backend/src/"
+
+          rsync -avz \
+            apolline-backend/drizzle/ \
+            "$VPS_USER@$VPS_HOST:/opt/apolline-backend/drizzle/"
+
+          # Manifests + config TS (à plat) — on les écrase
+          scp \
+            apolline-backend/package.json \
+            apolline-backend/package-lock.json \
+            apolline-backend/tsconfig.json \
+            "$VPS_USER@$VPS_HOST:/opt/apolline-backend/"
+
+      - name: Apply migrations + rebuild + restart
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" '
+            set -e
+            cd /opt/apolline-backend
+
+            echo "▶ Installation des dépendances npm…"
+            npm ci --no-audit --no-fund
+
+            echo "▶ Application des migrations SQL (idempotent)…"
+            for f in drizzle/*.sql; do
+              echo "  → $f"
+              sudo -u postgres psql -d apolline -f "$f" >/dev/null
+            done
+
+            echo "▶ Build TypeScript…"
+            npm run build
+
+            echo "▶ Redémarrage du service apolline-api…"
+            systemctl restart apolline-api
+            sleep 2
+            systemctl is-active apolline-api
+
+            echo "▶ Vérification healthcheck…"
+            curl -fsS http://127.0.0.1:3000/healthz | head -100 || (echo "⚠️ Healthcheck KO" && exit 1)
+
+            echo "✅ Backend déployé."
+          '
+
+      - name: Summary
+        run: |
+          echo "### ✅ Backend déployé" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Source synchronisée (\`src/\` + \`drizzle/\` + manifests)" >> $GITHUB_STEP_SUMMARY
+          echo "- Migrations SQL appliquées (idempotentes)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`npm ci\` + \`npm run build\` + \`systemctl restart apolline-api\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Healthcheck OK" >> $GITHUB_STEP_SUMMARY
