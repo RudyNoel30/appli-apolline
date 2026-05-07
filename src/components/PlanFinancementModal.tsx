@@ -100,6 +100,26 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
   // Mensualité totale courante (mois 0) et après chaque cassure
   const mensCourante = useMemo(() => mensualiteTotaleAt(prets, 0), [prets])
 
+  // Calcule l'écart entre mensualité totale min et max sur toute la durée — sert
+  // à détecter si le lissage est effectif (écart faible) ou pas (gros saut).
+  const dureeMaxPlan = useMemo(() => prets.reduce((m, p) => Math.max(m, p.dureeMois), 0), [prets])
+  const lissageStats = useMemo(() => {
+    if (dureeMaxPlan === 0) return null
+    let min = Infinity
+    let max = 0
+    for (let m = 0; m <= dureeMaxPlan; m += 6) {
+      const total = mensualiteTotaleAt(prets, m)
+      if (total > 0) {
+        if (total < min) min = total
+        if (total > max) max = total
+      }
+    }
+    if (min === Infinity) return null
+    const ecart = max - min
+    const ratio = max > 0 ? ecart / max : 0
+    return { min: Math.round(min), max: Math.round(max), ecart: Math.round(ecart), ratio }
+  }, [prets, dureeMaxPlan])
+
   // ─── Actions ────────────────────────────────────────────
   const onOptimiser = () => {
     if (!lisseur) {
@@ -233,6 +253,30 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
               <button onClick={onAddPret} className="mt-2 text-sm text-gold-700 hover:text-gold-800 hover:underline flex items-center gap-1">
                 <Plus className="h-4 w-4" /> Ajouter un prêt
               </button>
+
+              {/* Détail des paliers du lisseur */}
+              {lisseur && lisseur.paliers && lisseur.paliers.length > 0 && (
+                <div className="mt-3 p-2.5 rounded-lg bg-gold-50/40 border border-gold-200">
+                  <div className="text-[10px] uppercase tracking-wider text-gold-700 font-semibold mb-1.5">
+                    Paliers du lisseur — {lisseur.libelle ?? PRET_TYPE_LABEL[lisseur.type]}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {[...lisseur.paliers].sort((a, b) => a.rang - b.rang).map((pal, i) => {
+                      const start = lisseur.paliers!.slice(0, i).reduce((s, p) => s + p.nombreMois, 0)
+                      const end = start + pal.nombreMois
+                      return (
+                        <div key={pal.rang} className="rounded bg-white border border-gold-100 p-1.5">
+                          <div className="text-[10px] text-navy-500 uppercase tracking-wider">Palier {pal.rang}</div>
+                          <div className="font-mono text-navy-900 font-semibold">{eur(pal.echeanceHorsAssurance ?? 0, 2)}/mois</div>
+                          <div className="text-[10px] text-navy-500">
+                            mois {start + 1}–{end} ({(pal.nombreMois / 12).toFixed(1)} ans)
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Vue graphique / Mensualités / Amortissement (onglets) */}
@@ -244,6 +288,35 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
                   <TabButton active={view === 'amortissement'} onClick={() => setView('amortissement')}>Amortissement</TabButton>
                 </div>
               </div>
+              {/* Bannière de diagnostic du lissage (uniquement pour vue graphique) */}
+              {view === 'graphique' && lissageStats && prets.length >= 2 && (
+                <div className={cn(
+                  'px-3 py-2 text-xs border-b shrink-0 flex items-center gap-2',
+                  lissageStats.ratio < 0.05
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-amber-50 border-amber-200 text-amber-900',
+                )}>
+                  {lissageStats.ratio < 0.05 ? (
+                    <>
+                      <span className="text-base">✓</span>
+                      <span>
+                        <strong>Plan lissé</strong> — mensualité totale stable autour de {eur(lissageStats.max)}/mois
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base">⚠️</span>
+                      <span className="flex-1">
+                        <strong>Plan non lissé</strong> — mensualité totale varie de {eur(lissageStats.min)} à {eur(lissageStats.max)}
+                        {' '}(écart {eur(lissageStats.ecart)}, soit {(lissageStats.ratio * 100).toFixed(0)}%)
+                      </span>
+                      <button onClick={onOptimiser} disabled={!lisseur} className="text-xs underline hover:text-amber-700 font-semibold">
+                        Optimiser le plan →
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               {/* Le chart prend 100% de la hauteur dispo, plus de scrollbar interne */}
               <div className="flex-1 p-3 min-h-0">
                 {view === 'graphique' && (
