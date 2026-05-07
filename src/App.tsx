@@ -84,7 +84,24 @@ function useO365RedirectHandler() {
           persistConnection(account.username)
           toast.success('Session Microsoft 365 restaurée', { description: account.username })
         } else if (!account && userEmail) {
-          console.warn('[O365] o365UserEmail set but no MSAL account — keeping state, user can re-auth from Paramètres')
+          // Cas critique : email O365 mémorisé mais aucun account MSAL.
+          // C'est ici qu'on perdait la session "à chaque session". Tentons un
+          // ssoSilent avec loginHint pour récupérer la session sans interaction.
+          console.warn('[O365] o365UserEmail set but no MSAL account — attempting ssoSilent recovery…')
+          try {
+            const recovered = await o365.refreshTokenIfNeeded(O365_CLIENT_ID, O365_TENANT_ID, userEmail)
+            if (recovered) {
+              const recoveredAccount = await o365.getCurrentAccount(O365_CLIENT_ID, O365_TENANT_ID)
+              if (recoveredAccount) {
+                persistConnection(recoveredAccount.username)
+                toast.success('Session Microsoft 365 restaurée automatiquement', { description: recoveredAccount.username })
+              }
+            } else {
+              console.warn('[O365] Recovery failed — user must reconnect manually')
+            }
+          } catch (e) {
+            console.warn('[O365] Recovery error', e)
+          }
         } else if (!account && hasFreshAuthHash) {
           toast.error('Connexion O365 non finalisée', {
             description: 'Le retour Microsoft n\'a pas pu être validé. Réessayez depuis Paramètres → Intégrations.',
@@ -225,7 +242,8 @@ function useO365KeepAlive() {
 
     const tick = async () => {
       try {
-        const ok = await o365.refreshTokenIfNeeded(O365_CLIENT_ID, O365_TENANT_ID)
+        // userEmail = loginHint pour permettre la récupération même sans account MSAL en cache
+        const ok = await o365.refreshTokenIfNeeded(O365_CLIENT_ID, O365_TENANT_ID, userEmail)
         if (cancelled) return
         if (ok) {
           if (reconnectShownRef.current) {

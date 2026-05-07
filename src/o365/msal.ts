@@ -199,48 +199,72 @@ export async function signOut(clientId: string, tenantId: string): Promise<void>
  * En cas de double échec, retourne null → l'appelant doit demander
  * une reconnexion explicite via signIn.
  */
-export async function getAccessToken(clientId: string, tenantId: string): Promise<string | null> {
+export async function getAccessToken(
+  clientId: string,
+  tenantId: string,
+  /** Email à utiliser comme loginHint si MSAL n'a aucun account en cache.
+   *  Permet de récupérer la session sans interaction si la session
+   *  Microsoft globale est encore valide. */
+  loginHintFallback?: string,
+): Promise<string | null> {
   const msal = await getMsal(clientId, tenantId)
   if (!msal) return null
   const accounts = msal.getAllAccounts()
-  if (accounts.length === 0) return null
-  const account = accounts[0]!
 
-  // Tentative 1 : cache local MSAL
-  try {
-    const res = await msal.acquireTokenSilent({ scopes: SCOPES, account })
-    return res.accessToken
-  } catch (e: unknown) {
-    const errorCode = (e as { errorCode?: string })?.errorCode ?? 'unknown'
-    console.warn('[MSAL] acquireTokenSilent failed, trying ssoSilent fallback…', errorCode)
-
-    // Tentative 2 : ssoSilent (utilise le cookie de session Microsoft)
+  // Cas A : on a un account en cache → essai silent puis sso
+  if (accounts.length > 0) {
+    const account = accounts[0]!
     try {
-      const res = await msal.ssoSilent({
-        scopes: SCOPES,
-        loginHint: account.username,
-      })
-      // ssoSilent peut renvoyer un account différent — on persiste le cache
-      void persistMsalCache()
-      console.log('[MSAL] ssoSilent recovery successful')
+      const res = await msal.acquireTokenSilent({ scopes: SCOPES, account })
       return res.accessToken
-    } catch (e2: unknown) {
-      const errorCode2 = (e2 as { errorCode?: string })?.errorCode ?? 'unknown'
-      console.warn('[MSAL] ssoSilent also failed, user must reconnect manually', errorCode2)
+    } catch (e: unknown) {
+      const errorCode = (e as { errorCode?: string })?.errorCode ?? 'unknown'
+      console.warn('[MSAL] acquireTokenSilent failed, trying ssoSilent…', errorCode)
+      try {
+        const res = await msal.ssoSilent({ scopes: SCOPES, loginHint: account.username })
+        void persistMsalCache()
+        console.log('[MSAL] ssoSilent recovery successful (with account)')
+        return res.accessToken
+      } catch (e2: unknown) {
+        const errorCode2 = (e2 as { errorCode?: string })?.errorCode ?? 'unknown'
+        console.warn('[MSAL] ssoSilent failed', errorCode2)
+        return null
+      }
+    }
+  }
+
+  // Cas B : aucun account en cache MAIS on a un loginHint (email stocké)
+  // → ssoSilent avec hint pour tenter de récupérer la session via cookie Microsoft
+  if (loginHintFallback) {
+    try {
+      console.log('[MSAL] No cached account, trying ssoSilent with loginHint:', loginHintFallback)
+      const res = await msal.ssoSilent({ scopes: SCOPES, loginHint: loginHintFallback })
+      void persistMsalCache()
+      console.log('[MSAL] ssoSilent recovered session for', loginHintFallback)
+      return res.accessToken
+    } catch (e: unknown) {
+      const errorCode = (e as { errorCode?: string })?.errorCode ?? 'unknown'
+      console.warn('[MSAL] ssoSilent without account failed', errorCode)
       return null
     }
   }
+
+  // Cas C : ni account ni hint → impossible de récupérer
+  return null
 }
 
 /**
- * Tente une reconnexion silencieuse au démarrage de l'app. À appeler une fois
- * après initialisation. Si le silent échoue ET que ssoSilent échoue, déclenche
- * `onReconnectRequired` pour qu'on puisse prévenir l'utilisateur.
+ * Tente une reconnexion silencieuse au démarrage de l'app.
+ * Si `loginHint` est fourni (email mémorisé), tente même sans account en cache.
  *
  * Retourne true si la session est OK (silent ou sso a réussi), false sinon.
  */
-export async function refreshTokenIfNeeded(clientId: string, tenantId: string): Promise<boolean> {
-  const token = await getAccessToken(clientId, tenantId)
+export async function refreshTokenIfNeeded(
+  clientId: string,
+  tenantId: string,
+  loginHint?: string,
+): Promise<boolean> {
+  const token = await getAccessToken(clientId, tenantId, loginHint)
   return token !== null
 }
 

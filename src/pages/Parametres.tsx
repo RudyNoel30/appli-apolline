@@ -1058,7 +1058,7 @@ function IntegrationsPane() {
                 onClick={async () => {
                   const t = toast.loading('Test de la connexion Microsoft 365…')
                   try {
-                    const ok = await o365.refreshTokenIfNeeded(O365_CLIENT_ID, O365_TENANT_ID)
+                    const ok = await o365.refreshTokenIfNeeded(O365_CLIENT_ID, O365_TENANT_ID, o365Email ?? undefined)
                     if (ok) {
                       toast.success('Connexion Microsoft 365 OK', { id: t, description: 'Token rafraîchi automatiquement.' })
                     } else {

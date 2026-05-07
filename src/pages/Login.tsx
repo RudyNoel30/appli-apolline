@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useRef, useEffect, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, Shield } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
@@ -17,6 +17,17 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+
+  // Focus programmatique sur l'email UNIQUEMENT au 1er mount (jamais après).
+  // L'attribut React `autoFocus` peut se re-déclencher sur certains re-mounts
+  // et faire sauter le curseur du password vers l'email pendant la frappe.
+  const emailRef = useRef<HTMLInputElement>(null)
+  const focusedOnceRef = useRef(false)
+  useEffect(() => {
+    if (focusedOnceRef.current) return
+    focusedOnceRef.current = true
+    emailRef.current?.focus()
+  }, [])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -92,6 +103,7 @@ export default function Login() {
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-navy-400 group-focus-within:text-gold-400 transition-colors" />
               <input
                 id="email"
+                ref={emailRef}
                 name="apolline-identifiant"
                 type="email"
                 autoComplete="off"
@@ -100,7 +112,6 @@ export default function Login() {
                 spellCheck={false}
                 data-lpignore="true"
                 data-form-type="other"
-                autoFocus
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(null) }}
                 placeholder="prenom@groupe-apolline.fr"
