@@ -415,7 +415,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
         <ResponsiveContainer width="100%" height="100%" debounce={1}>
           <AreaChart
             data={data}
-            margin={{ top: 16, right: 20, left: 8, bottom: 28 }}
+            margin={{ top: 16, right: 28, left: 8, bottom: 28 }}
           >
             <defs>
               {/* Fond du panel : dégradé blanc cassé → bleuté très clair */}
@@ -471,7 +471,9 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               width={72}
             />
 
-            {/* Reference line à la mensualité cible (moyenne sur la durée) */}
+            {/* Reference line à la mensualité cible (moyenne sur la durée).
+                Label en insideTopRight = toujours visible dans la zone du chart,
+                jamais coupé par la marge droite. */}
             {cible > 0 && (
               <ReferenceLine
                 y={Math.round(cible)}
@@ -480,12 +482,13 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
                 strokeWidth={1.5}
                 label={{
                   value: `Cible ${formatEuro(Math.round(cible))}`,
-                  position: 'right',
+                  position: 'insideTopRight',
                   fill: '#92704A',
                   fontSize: 10,
                   fontWeight: 700,
                   offset: 6,
                 }}
+                ifOverflow="extendDomain"
               />
             )}
 

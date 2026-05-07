@@ -1,0 +1,11 @@
+{
+  "notes": "Release v0.1.86",
+  "pub_date": "2026-05-07T14:27:44Z",
+  "version": "0.1.86",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVURVV2MG4waDd5UmhkSGNrMFFvSEwzRkxEaEV3bHpTQThCYUtCaUxIUHN4TlJqcHZ4cUtmYUhRRGF3UzVGUnJjWkVTVnBQQUpMNDRCKzY5cGY3UFU4eVAxWDVTaEk2NUF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MTY0MDYzCWZpbGU6RXh0cmFwb2xfMC4xLjg2X3g2NF9lbi1VUy5tc2kKZTJHK3g4TDE1Q0NBLzc0Wk5nY09uekQwTVVwdG9xREtFYWpZem9RemJVdlY1eE1XcUNqWFRRdkgxSTlXVVRLV2lrQkRiNHlPMU5NYk8vY1pCR0dPQWc9PQo=",
+      "url": "https://updates.apolline.groupe-apolline.eu/Extrapol_0.1.86_x64_en-US.msi"
+    }
+  }
+}

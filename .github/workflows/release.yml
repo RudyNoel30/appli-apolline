@@ -168,26 +168,34 @@ jobs:
             echo "::error::secret VPS_HOST n'est pas défini"
             exit 1
           fi
-          # ssh-keyscan peut être flaky (timeout, SSH server slow). On retry 3x
-          # avec timeout 10s et on tolère l'échec — scp en dessous tombera sur
-          # StrictHostKeyChecking=accept-new qui ajoutera l'hôte au 1er contact.
-          set +e
-          for i in 1 2 3; do
-            ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-            if [ -s ~/.ssh/known_hosts ]; then
-              echo "✓ known_hosts populé (tentative $i)"
-              break
-            fi
-            echo "ssh-keyscan tentative $i vide, retry…"
-            sleep 2
-          done
-          set -e
+          # 1 seule tentative ssh-keyscan : on évite d'enchaîner plusieurs
+          # connexions SSH rapides qui pourraient trigger fail2ban côté VPS.
+          # Si ça échoue, scp en dessous tombera sur accept-new au 1er contact.
+          ssh-keyscan -T 15 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           chmod 600 ~/.ssh/known_hosts 2>/dev/null || true
-          # Compte les entrées (juste pour le log, pas un check bloquant)
           LINES=$(wc -l < ~/.ssh/known_hosts 2>/dev/null || echo 0)
           echo "known_hosts: $LINES entrée(s)"
 
-      - name: Upload MSI + sig + latest.json to VPS
+      - name: Pre-flight TCP check on VPS:22
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        shell: bash
+        run: |
+          # Test TCP brut (utilise /dev/tcp de bash, dispo sur Git Bash Windows).
+          # Purement informatif : on ne fait pas exit 1 ici, on laisse scp tenter
+          # avec son propre retry. Le but : avoir un diagnostic clair dans les logs.
+          if timeout 15 bash -c "</dev/tcp/$VPS_HOST/22" 2>/dev/null; then
+            echo "✓ Port 22 atteignable sur le VPS depuis ce runner"
+          else
+            echo "::warning::Port 22 NON atteignable depuis ce runner Windows."
+            echo "::warning::Causes probables :"
+            echo "::warning::  1. fail2ban a banni l'IP du runner (côté VPS, vérifier: fail2ban-client status sshd)"
+            echo "::warning::  2. Pare-feu Hostinger bloque la plage IP des runners Windows GitHub Actions"
+            echo "::warning::  3. VPS momentanément injoignable"
+            echo "::warning::Le scp va quand même tenter avec retry — si ça échoue 3 fois, vérifier le VPS."
+          fi
+
+      - name: Upload MSI + sig + latest.json to VPS (avec retry)
         env:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -196,15 +204,41 @@ jobs:
         run: |
           DIR="${VPS_RELEASES_DIR:-/opt/apolline-releases}"
           # ssh-agent chargé via webfactory action.
-          # StrictHostKeyChecking=accept-new : safety net si known_hosts est vide
-          # (ssh-keyscan a peut-être échoué) — accepte au 1er contact, pas après.
-          scp \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=20 \
-            "${{ steps.artifact.outputs.msi_path }}" \
-            "${{ steps.artifact.outputs.sig_path }}" \
-            latest.json \
-            "${VPS_USER}@${VPS_HOST}:${DIR}/"
+          # 3 tentatives avec sleep 30s entre chaque — laisse à fail2ban le
+          # temps de cooldown si c'est lui qui bloquait.
+          set +e
+          SUCCESS=false
+          for i in 1 2 3; do
+            echo "▶ Tentative scp $i/3…"
+            scp \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=30 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=3 \
+              "${{ steps.artifact.outputs.msi_path }}" \
+              "${{ steps.artifact.outputs.sig_path }}" \
+              latest.json \
+              "${VPS_USER}@${VPS_HOST}:${DIR}/"
+            if [ $? -eq 0 ]; then
+              SUCCESS=true
+              echo "✓ Upload réussi (tentative $i)"
+              break
+            fi
+            if [ $i -lt 3 ]; then
+              echo "  ✗ Échec, attente 30s avant retry…"
+              sleep 30
+            fi
+          done
+          set -e
+          if [ "$SUCCESS" = "false" ]; then
+            echo "::error::scp KO après 3 tentatives sur ${VPS_HOST}:22"
+            echo "::error::À vérifier côté VPS :"
+            echo "::error::  ssh root@vps 'fail2ban-client status sshd'"
+            echo "::error::  → si l'IP du runner est dans 'Banned IP list', faire :"
+            echo "::error::    ssh root@vps 'fail2ban-client set sshd unbanip <IP>'"
+            echo "::error::  Voir les IPs des runners Windows : https://api.github.com/meta (clé 'actions')"
+            exit 1
+          fi
           echo "Uploaded to ${VPS_USER}@${VPS_HOST}:${DIR}/"
 
       - name: Commit version bump
@@ -265,17 +299,8 @@ jobs:
             echo "::error::secret VPS_HOST n'est pas défini"
             exit 1
           fi
-          set +e
-          for i in 1 2 3; do
-            ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-            if [ -s ~/.ssh/known_hosts ]; then
-              echo "✓ known_hosts populé (tentative $i)"
-              break
-            fi
-            echo "ssh-keyscan tentative $i vide, retry…"
-            sleep 2
-          done
-          set -e
+          # 1 seule tentative ssh-keyscan pour ne pas trigger fail2ban côté VPS.
+          ssh-keyscan -T 15 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           chmod 600 ~/.ssh/known_hosts 2>/dev/null || true
           LINES=$(wc -l < ~/.ssh/known_hosts 2>/dev/null || echo 0)
           echo "known_hosts: $LINES entrée(s)"
