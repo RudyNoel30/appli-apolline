@@ -13,7 +13,7 @@
  *  - TAEA = Taux Annuel Effectif d'Assurance : différentiel entre TAEG avec et
  *    sans assurance, exprimé en taux annuel équivalent.
  */
-import type { Pret } from '@/data/mock'
+import type { Pret, PretPalier } from '@/data/mock'
 
 /**
  * Mensualité d'amortissement classique (formule constante).
@@ -146,4 +146,189 @@ export function effectiveMensualite(pret: Pret): {
   const isStored = useStoredHA && useStoredAss
 
   return { horsAssurance, assurance, totale: horsAssurance + assurance, isStored }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LISSAGE — Calcul automatique des paliers du prêt lisseur
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Identifie le prêt "lisseur" parmi un montage : le candidat idéal pour porter
+ * les paliers. Critères :
+ *  1. Profil 'paliers_lissage' explicitement marqué → prioritaire
+ *  2. Type 'lissage' dédié
+ *  3. Sinon : le prêt amortissable le plus long
+ *
+ * Retourne null si pas de candidat (ex: que des PTZ ou un seul prêt).
+ */
+export function findPretLisseur(prets: Pret[]): Pret | null {
+  if (prets.length < 2) return null
+
+  // Priorité 1 : profil paliers_lissage
+  const explicit = prets.find((p) => p.profilAmortissement === 'paliers_lissage')
+  if (explicit) return explicit
+
+  // Priorité 2 : type lissage
+  const lissage = prets.find((p) => p.type === 'lissage')
+  if (lissage) return lissage
+
+  // Priorité 3 : le plus long amortissable
+  const amort = prets.filter((p) => p.type === 'amortissable')
+  if (amort.length > 0) {
+    return amort.reduce((longest, p) => p.dureeMois > longest.dureeMois ? p : longest)
+  }
+
+  return null
+}
+
+/**
+ * Calcule la mensualité hors assurance d'un autre prêt à un mois donné.
+ * Sert à déterminer ce que les autres prêts vont "manger" du quota total.
+ */
+function mensHaAtMonth(p: Pret, mois: number): number {
+  if (mois >= p.dureeMois) return 0
+  const differeT = p.differeTotal ?? 0
+  if (mois < differeT) return 0
+  // Mensualité standard (hors paliers — pour les prêts non-lisseurs)
+  if (p.mensualiteHorsAssurance != null && p.mensualiteHorsAssurance > 0) {
+    return p.mensualiteHorsAssurance
+  }
+  // Calcul à la volée si pas stocké
+  return calcMensualite(p.montant, p.tauxNominal ?? 0, p.dureeMois - differeT)
+}
+
+/**
+ * Optimisation du plan : calcule les paliers du prêt lisseur pour qu'avec
+ * les autres prêts, la mensualité TOTALE hors assurance reste **constante**.
+ *
+ * Algorithme :
+ *  1. Identifie les "cassures" (mois où une mensualité d'autre prêt change :
+ *     fin d'un prêt, fin d'un différé, début d'un palier d'un autre lisseur).
+ *  2. Découpe le calendrier du lisseur en segments entre ces cassures.
+ *  3. Pour chaque segment, calcule la mensualité hors assurance du lisseur
+ *     telle que TOTAL = cible.
+ *  4. La cible est calculée pour que le lisseur amortisse exactement son
+ *     capital sur sa durée totale (recherche par bisection sur la cible).
+ *
+ * Retourne le tableau de paliers à stocker dans pret.paliers.
+ *
+ * Si la cible n'est pas atteignable (paliers négatifs), warning + retourne null.
+ */
+export function optimiserLissage(
+  lisseur: Pret,
+  autres: Pret[],
+): { paliers: PretPalier[]; mensualiteCible: number; warning?: string } | null {
+  if (lisseur.dureeMois <= 0 || lisseur.montant <= 0) return null
+
+  const taux = (lisseur.tauxNominal ?? 0) / 100
+  const i = taux / 12
+  const N = lisseur.dureeMois
+
+  // Cassures = mois où la somme des mensualités des autres prêts change
+  const cassures = new Set<number>([0, N])
+  for (const p of autres) {
+    cassures.add(Math.min(p.dureeMois, N))
+    if (p.differeTotal && p.differeTotal > 0) cassures.add(p.differeTotal)
+    if (p.differeAmortissement && p.differeAmortissement > 0) cassures.add(p.differeAmortissement)
+  }
+  const breakpoints = [...cassures].filter((m) => m >= 0 && m <= N).sort((a, b) => a - b)
+
+  // Segments : [start, end), avec la mensualité "autres" constante sur chaque segment
+  type Segment = { start: number; end: number; nombreMois: number; mensAutres: number }
+  const segments: Segment[] = []
+  for (let k = 0; k < breakpoints.length - 1; k++) {
+    const start = breakpoints[k]!
+    const end = breakpoints[k + 1]!
+    if (end <= start) continue
+    // Mensualité "autres" sur ce segment (stable par construction)
+    const mensAutres = autres.reduce((s, p) => s + mensHaAtMonth(p, start), 0)
+    segments.push({ start, end, nombreMois: end - start, mensAutres })
+  }
+
+  // Recherche de la mensualité cible TOTALE par bisection :
+  // on cherche M_cible tel que les paliers du lisseur amortissent exactement
+  // son capital sur sa durée.
+  const evaluateCible = (cible: number): number => {
+    // Pour chaque segment, mens_lisseur = max(0, cible - mensAutres).
+    // KRD évolue : KRD_{k+1} = KRD_k * (1+i)^n - mens_palier * ((1+i)^n - 1) / i
+    // (où n = nombreMois du palier)
+    let krd = lisseur.montant
+    for (const seg of segments) {
+      const mensLisseur = Math.max(0, cible - seg.mensAutres)
+      const n = seg.nombreMois
+      if (i === 0) {
+        krd = krd - mensLisseur * n
+      } else {
+        // KRD final après n mensualités constantes :
+        // KRD_n = KRD_0 * (1+i)^n - mens * ((1+i)^n - 1) / i
+        const pow = Math.pow(1 + i, n)
+        krd = krd * pow - mensLisseur * (pow - 1) / i
+      }
+    }
+    return krd  // 0 si parfait, > 0 si reste à amortir, < 0 si trop amorti
+  }
+
+  // Bisection sur cible. Bornes : [mens autres min ... mens autres min + 10× mens classique]
+  // Cible min plausible = max(mensAutres) (pour que mens_lisseur ≥ 0)
+  const cibleMinPlausible = Math.max(...segments.map((s) => s.mensAutres))
+  const mensClassique = calcMensualite(lisseur.montant, lisseur.tauxNominal ?? 0, N)
+  let lo = cibleMinPlausible
+  let hi = cibleMinPlausible + mensClassique * 3
+  let cible = (lo + hi) / 2
+  for (let iter = 0; iter < 100; iter++) {
+    cible = (lo + hi) / 2
+    const reste = evaluateCible(cible)
+    if (Math.abs(reste) < 1) break
+    if (reste > 0) lo = cible  // pas assez amorti → augmenter cible
+    else hi = cible            // trop amorti → diminuer cible
+  }
+
+  // Construit les paliers résultants
+  const paliers: PretPalier[] = segments.map((seg, idx) => ({
+    rang: (idx + 1) as 1 | 2 | 3 | 4 | 5,
+    nombreMois: seg.nombreMois,
+    echeanceHorsAssurance: Math.round(Math.max(0, cible - seg.mensAutres)),
+  })).filter((p) => p.nombreMois > 0)
+
+  // Limite à 5 paliers (contrainte type) — fusionne les segments mineurs si besoin
+  const palFinaux = paliers.slice(0, 5).map((p, idx) => ({ ...p, rang: (idx + 1) as 1 | 2 | 3 | 4 | 5 }))
+
+  let warning: string | undefined
+  if (palFinaux.some((p) => (p.echeanceHorsAssurance ?? 0) === 0)) {
+    warning = 'Au moins un palier a une mensualité de 0 € — le total cible est inférieur à la mensualité des autres prêts sur ce segment.'
+  }
+  if (palFinaux.length === 0) {
+    return null
+  }
+
+  return { paliers: palFinaux, mensualiteCible: Math.round(cible), warning }
+}
+
+/**
+ * Mensualité totale d'un montage à un mois donné — somme de tous les prêts
+ * en respectant paliers + différés + amortissement individuel.
+ *
+ * Utile pour le graphique stacké et les calculs de cohérence.
+ */
+export function mensualiteTotaleAt(prets: Pret[], mois: number): number {
+  return prets.reduce((sum, p) => {
+    if (mois >= p.dureeMois) return sum
+    const differeT = p.differeTotal ?? 0
+    if (mois < differeT) return sum
+
+    // Paliers ?
+    if (p.paliers && p.paliers.length > 0) {
+      let cumul = differeT
+      for (const palier of [...p.paliers].sort((a, b) => a.rang - b.rang)) {
+        if (mois < cumul + palier.nombreMois) {
+          return sum + (palier.echeanceHorsAssurance ?? 0)
+        }
+        cumul += palier.nombreMois
+      }
+      return sum
+    }
+
+    // Sinon mensualité fixe
+    return sum + mensHaAtMonth(p, mois)
+  }, 0)
 }

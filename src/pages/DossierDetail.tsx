@@ -10,6 +10,7 @@ import FactureFormModal from '@/components/FactureFormModal'
 import StatusBadge from '@/components/StatusBadge'
 import { factures as facturesApi, type Facture, pieces as piecesApi } from '@/db/api'
 import { effectiveMensualite, calcTAEG, calcTAEA } from '@/lib/finance'
+import PlanFinancementModal from '@/components/PlanFinancementModal'
 import Modal from '@/components/Modal'
 import AiPreviewModal from '@/components/AiPreviewModal'
 import DossierEditor from '@/components/DossierEditor'
@@ -810,6 +811,7 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
 
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingPret, setEditingPret] = useState<import('@/data/mock').Pret | undefined>(undefined)
+  const [planOpen, setPlanOpen] = useState(false)
 
   const prets = useMemo(
     () => allPrets.filter((p) => p.dossierId === dossier.id).sort((a, b) => a.rang - b.rang),
@@ -890,9 +892,14 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
       <Section
         title={`Prêts (${prets.length})`}
         action={
-          <button className="btn-gold text-xs" onClick={openNew}>
-            <Plus className="h-3.5 w-3.5" /> Ajouter un prêt
-          </button>
+          <div className="flex gap-2">
+            <button className="btn-outline text-xs" onClick={() => setPlanOpen(true)} disabled={prets.length === 0}>
+              <Sparkles className="h-3.5 w-3.5" /> Construire le plan
+            </button>
+            <button className="btn-gold text-xs" onClick={openNew}>
+              <Plus className="h-3.5 w-3.5" /> Ajouter un prêt
+            </button>
+          </div>
         }
       >
         {prets.length === 0 ? (
@@ -1031,6 +1038,14 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
         onClose={() => { setEditorOpen(false); setEditingPret(undefined) }}
         onSave={handleSave}
         onDelete={editingPret ? handleDelete : undefined}
+      />
+
+      <PlanFinancementModal
+        open={planOpen}
+        onClose={() => setPlanOpen(false)}
+        dossier={dossier}
+        onAddPret={() => { setPlanOpen(false); openNew() }}
+        onEditPret={(p) => { setPlanOpen(false); openEdit(p) }}
       />
     </>
   )

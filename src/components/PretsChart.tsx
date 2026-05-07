@@ -7,10 +7,11 @@ type Props = {
   /**
    * Mode visuel :
    *  - 'krd' : capital restant dû par prêt (areachart empilé qui descend vers 0)
-   *  - 'mensualites' : mensualités du palier en cours dans le temps
-   *  - 'amortissement' : décomposition mensuelle capital/intérêts (tableau d'amortissement)
+   *  - 'mensualites' : mensualités par palier en lignes séparées (LineChart)
+   *  - 'mensualites_stacked' : mensualités empilées (cible plate si lissage actif) — vue Cifacil-style
+   *  - 'amortissement' : décomposition mensuelle capital/intérêts
    */
-  mode?: 'krd' | 'mensualites' | 'amortissement'
+  mode?: 'krd' | 'mensualites' | 'mensualites_stacked' | 'amortissement'
   height?: number
 }
 
@@ -145,7 +146,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
       for (const p of sorted) {
         if (mode === 'krd') {
           point[`pret_${p.id}`] = Math.round(krdAt(p, m))
-        } else if (mode === 'mensualites') {
+        } else if (mode === 'mensualites' || mode === 'mensualites_stacked') {
           point[`pret_${p.id}`] = Math.round(mensualiteAt(p, m))
         } else {
           const { capital, interet } = decomposeMois(p, mForCalc)
@@ -334,6 +335,80 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               fillOpacity={0.85}
               strokeWidth={1}
               name="totalCapital"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
+  if (mode === 'mensualites_stacked') {
+    // AreaChart empilé pour visualiser le lissage : chaque prêt occupe une
+    // bande de hauteur = sa mensualité du moment. Le sommet de la stack = la
+    // mensualité totale (idéalement plate si plan lissé).
+    return (
+      <div style={{ width: '100%', height }}>
+        <ResponsiveContainer>
+          <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+            <XAxis
+              dataKey="mois"
+              type="number"
+              domain={[0, dureeMax]}
+              tickFormatter={formatYears}
+              tick={{ fontSize: 11, fill: '#64748B' }}
+              ticks={Array.from({ length: Math.ceil(dureeMax / 12) + 1 }, (_, i) => i * 12).filter((m) => m <= dureeMax)}
+              label={{ value: 'Années', position: 'insideBottom', offset: -2, style: { fontSize: 10, fill: '#94A3B8' } }}
+            />
+            <YAxis
+              tickFormatter={formatEuro}
+              tick={{ fontSize: 11, fill: '#64748B' }}
+              label={{ value: 'Échéance / mois', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#94A3B8' } }}
+            />
+            <Tooltip
+              labelFormatter={(m) => `Mois ${m} (~${(m / 12).toFixed(1)} ans)`}
+              formatter={(value: number, name: string) => {
+                if (name === 'total') return [formatEuro(value), 'Mensualité totale']
+                const id = name.replace('pret_', '')
+                const p = sorted.find((x) => x.id === id)
+                if (!p) return [formatEuro(value), name]
+                return [formatEuro(value), p.libelle ?? PRET_TYPE_LABEL[p.type]]
+              }}
+              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}
+            />
+            <Legend
+              verticalAlign="top"
+              height={32}
+              iconType="square"
+              formatter={(value: string) => {
+                if (value === 'total') return null  // on cache le "total" de la légende
+                const id = value.replace('pret_', '')
+                const p = sorted.find((x) => x.id === id)
+                if (!p) return value
+                return p.libelle ?? PRET_TYPE_LABEL[p.type]
+              }}
+            />
+            {/* Stack par prêt — type "step" pour bien marquer les paliers */}
+            {sorted.map((p) => (
+              <Area
+                key={p.id}
+                type="stepAfter"
+                dataKey={`pret_${p.id}`}
+                stackId="mens"
+                stroke={colorByPret[p.id]}
+                fill={colorByPret[p.id]}
+                fillOpacity={0.85}
+                strokeWidth={1}
+              />
+            ))}
+            {/* Ligne du total en pointillés gold pour bien voir si c'est plat */}
+            <Line
+              type="stepAfter"
+              dataKey="total"
+              stroke="#C9A961"
+              strokeWidth={2.5}
+              strokeDasharray="6 3"
+              dot={false}
             />
           </AreaChart>
         </ResponsiveContainer>
