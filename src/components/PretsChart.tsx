@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, ReferenceLine } from 'recharts'
 import { type Pret, pretCouleur, PRET_TYPE_LABEL } from '@/data/mock'
 
 type Props = {
@@ -14,6 +14,31 @@ type Props = {
   mode?: 'krd' | 'mensualites' | 'mensualites_stacked' | 'amortissement'
   /** Hauteur du chart : nombre = px fixe, string = CSS (ex '100%' pour s'adapter au parent). */
   height?: number | string
+}
+
+/** Convertit un hex (#RRGGBB) en {r,g,b}. Retourne null si format invalide. */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const c = hex.replace('#', '').trim()
+  if (c.length !== 6) return null
+  const r = parseInt(c.slice(0, 2), 16)
+  const g = parseInt(c.slice(2, 4), 16)
+  const b = parseInt(c.slice(4, 6), 16)
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return null
+  return { r, g, b }
+}
+const rgbToHex = (r: number, g: number, b: number) =>
+  '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')
+
+/** Assombrit une couleur hex en multipliant chaque canal par (1 - amount). */
+function darken(hex: string, amount = 0.25): string {
+  const c = hexToRgb(hex); if (!c) return hex
+  return rgbToHex(c.r * (1 - amount), c.g * (1 - amount), c.b * (1 - amount))
+}
+
+/** Éclaircit une couleur hex en interpolant vers blanc. */
+function lighten(hex: string, amount = 0.2): string {
+  const c = hexToRgb(hex); if (!c) return hex
+  return rgbToHex(c.r + (255 - c.r) * amount, c.g + (255 - c.g) * amount, c.b + (255 - c.b) * amount)
 }
 
 /**
@@ -349,35 +374,39 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
 
   if (mode === 'mensualites_stacked') {
     // ─────────────────────────────────────────────────────────────────────
-    // Vue Cifacil : AreaChart empilé montrant la composition de la mensualité
-    // mois par mois. Chaque bande = un prêt. Sommet de la stack = mensualité
-    // totale du foyer. Si le plan est lissé, la stack a un sommet plat.
+    // Vue plan de financement : chaque prêt occupe une bande de hauteur =
+    // sa mensualité du moment. Sommet de la stack = mensualité totale du
+    // foyer. Plan lissé ⇒ sommet plat.
     //
-    // Choix visuels (alignés sur la maquette client) :
-    //  • Fond panel gris clair (#F1F5F9) pour faire ressortir les bandes
-    //  • Pas de légende (la table des prêts au-dessus joue ce rôle)
-    //  • Pas de ligne "total" en pointillés (le sommet plat la montre déjà)
-    //  • Bandes opaques avec contour fin pour un rendu net (pas de transparence)
-    //  • Y axis en pas de 250 € (ou 500 € si plan > 4000 €), max snap au 250 €
-    //  • X axis en années entières, tous les 2 ans pour aérer
-    //  • Step-after type pour marquer franchement les transitions de paliers
+    // Traitement visuel premium :
+    //  • Gradients verticaux par prêt (clair en haut, foncé en bas) → profondeur
+    //  • Stroke = teinte foncée de la couleur du prêt → contour cohérent
+    //  • Fond panel ivoire dégradé (de blanc à gris très clair)
+    //  • Glyph dot subtil au niveau de la cible si plan lissé
+    //  • Tooltip premium avec accent gold + total mis en avant
+    //  • Reference line gold pointillée au niveau de la mensualité cible
+    //  • Ombre portée discrète sous la stack (filter SVG)
     // ─────────────────────────────────────────────────────────────────────
-    const maxTotal = data.reduce((m, d) => Math.max(m, Number(d.total) || 0), 0)
-    // Snap au 250 € supérieur, ou au 500 € si > 4000 €
-    const ySnap = maxTotal > 4000 ? 500 : 250
+    const totals = data.map((d) => Number(d.total) || 0).filter((t) => t > 0)
+    const maxTotal = totals.length ? Math.max(...totals) : 0
+    const minTotal = totals.length ? Math.min(...totals) : 0
+    const cible = totals.length ? totals.reduce((s, v) => s + v, 0) / totals.length : 0
+    const isLisse = totals.length > 0 && (maxTotal - minTotal) / Math.max(1, maxTotal) < 0.05
+
+    // Snap Y au pas adapté
+    const ySnap = maxTotal > 4000 ? 500 : maxTotal > 1500 ? 250 : 100
     const yMax = maxTotal > 0
-      ? Math.ceil((maxTotal * 1.10) / ySnap) * ySnap
+      ? Math.ceil((maxTotal * 1.12) / ySnap) * ySnap
       : 1000
 
-    // Génère les ticks Y au pas ySnap (0, 250, 500, ..., yMax)
     const yTicks: number[] = []
     for (let v = 0; v <= yMax; v += ySnap) yTicks.push(v)
 
-    // Ticks X en années pleines, tous les 2 ans (ou tous les ans si durée < 12 ans)
     const dureeYears = Math.ceil(dureeMax / 12)
-    const xStep = dureeYears > 12 ? 2 : 1
+    const xStep = dureeYears > 20 ? 2 : 1
     const xTicks: number[] = []
     for (let y = 0; y <= dureeYears; y += xStep) xTicks.push(y * 12)
+    if (xTicks[xTicks.length - 1] !== dureeMax) xTicks.push(dureeMax)
 
     const formatYearsClean = (m: number) => `${Math.round(m / 12)}`
 
@@ -386,73 +415,112 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
         <ResponsiveContainer width="100%" height="100%" debounce={1}>
           <AreaChart
             data={data}
-            margin={{ top: 12, right: 16, left: 4, bottom: 24 }}
+            margin={{ top: 16, right: 20, left: 8, bottom: 28 }}
           >
-            {/* CartesianGrid avec fill = panel gris clair façon Cifacil */}
+            <defs>
+              {/* Fond du panel : dégradé blanc cassé → bleuté très clair */}
+              <linearGradient id="panelBg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#FFFFFF" />
+                <stop offset="100%" stopColor="#EEF2F7" />
+              </linearGradient>
+              {/* Un gradient par prêt — clair en haut, sombre en bas */}
+              {sorted.map((p) => {
+                const c = colorByPret[p.id]
+                return (
+                  <linearGradient key={p.id} id={`pretGrad_${p.id}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={lighten(c, 0.12)} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={darken(c, 0.18)} stopOpacity={1} />
+                  </linearGradient>
+                )
+              })}
+            </defs>
+
+            {/* Panel de fond + grille */}
             <CartesianGrid
               strokeDasharray="2 4"
               stroke="#CBD5E1"
-              fill="#F1F5F9"
+              fill="url(#panelBg)"
               fillOpacity={1}
-              vertical={true}
-              horizontal={true}
+              vertical
+              horizontal
             />
+
             <XAxis
               dataKey="mois"
               type="number"
               domain={[0, dureeMax]}
               ticks={xTicks}
               tickFormatter={formatYearsClean}
-              tick={{ fontSize: 11, fill: '#475569' }}
-              axisLine={{ stroke: '#94A3B8' }}
+              tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }}
+              axisLine={{ stroke: '#64748B', strokeWidth: 1 }}
               tickLine={{ stroke: '#94A3B8' }}
               label={{
                 value: 'Années',
                 position: 'insideBottom',
-                offset: -8,
-                style: { fontSize: 11, fill: '#64748B', fontWeight: 500 },
+                offset: -10,
+                style: { fontSize: 11, fill: '#475569', fontWeight: 600, letterSpacing: '0.05em' },
               }}
             />
             <YAxis
               domain={[0, yMax]}
               ticks={yTicks}
               tickFormatter={(v) => `${Math.round(v).toLocaleString('fr-FR')} €`}
-              tick={{ fontSize: 11, fill: '#475569' }}
-              axisLine={{ stroke: '#94A3B8' }}
+              tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }}
+              axisLine={{ stroke: '#64748B', strokeWidth: 1 }}
               tickLine={{ stroke: '#94A3B8' }}
-              width={68}
+              width={72}
             />
+
+            {/* Reference line à la mensualité cible (moyenne sur la durée) */}
+            {cible > 0 && (
+              <ReferenceLine
+                y={Math.round(cible)}
+                stroke="#C9A961"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{
+                  value: `Cible ${formatEuro(Math.round(cible))}`,
+                  position: 'right',
+                  fill: '#92704A',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  offset: 6,
+                }}
+              />
+            )}
+
             <Tooltip
-              labelFormatter={(m) => `${formatYearsClean(m)} ans (mois ${m})`}
-              formatter={(value: number, name: string) => {
-                if (name === 'total') return [formatEuro(value), 'Mensualité totale']
-                const id = name.replace('pret_', '')
-                const p = sorted.find((x) => x.id === id)
-                if (!p) return [formatEuro(value), name]
-                return [formatEuro(value), p.libelle ?? PRET_TYPE_LABEL[p.type]]
-              }}
-              contentStyle={{
-                fontSize: 12,
-                borderRadius: 6,
-                border: '1px solid #CBD5E1',
-                boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
-              }}
-              cursor={{ fill: 'rgba(201,169,97,0.08)' }}
+              content={<StackedTooltip prets={sorted} colorByPret={colorByPret} formatEuro={formatEuro} />}
+              cursor={{ fill: 'rgba(201,169,97,0.10)' }}
             />
-            {/* Stack par prêt — bandes opaques, contour navy foncé pour un look net */}
+
+            {/* Stack par prêt — bandes en gradient avec contour foncé cohérent */}
             {sorted.map((p) => (
               <Area
                 key={p.id}
                 type="stepAfter"
                 dataKey={`pret_${p.id}`}
                 stackId="mens"
-                stroke="#0A1F3D"
-                strokeWidth={0.75}
-                fill={colorByPret[p.id]}
+                stroke={darken(colorByPret[p.id], 0.35)}
+                strokeWidth={1.25}
+                strokeLinejoin="round"
+                fill={`url(#pretGrad_${p.id})`}
                 fillOpacity={1}
                 isAnimationActive={false}
               />
             ))}
+
+            {/* Si lissé : trait fin gold sur le sommet pour souligner la stabilité */}
+            {isLisse && (
+              <Line
+                type="stepAfter"
+                dataKey="total"
+                stroke="#C9A961"
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -499,6 +567,77 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
           <Line type="stepAfter" dataKey="total" stroke="#0A1F3D" strokeWidth={2.5} strokeDasharray="4 4" dot={false} />
         </LineChart>
       </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ─── Tooltip premium pour le mode mensualites_stacked ───────────────────────
+type StackedTooltipProps = {
+  active?: boolean
+  payload?: Array<{ name?: string; value?: number; payload?: Record<string, number> }>
+  label?: number
+  prets: Pret[]
+  colorByPret: Record<string, string>
+  formatEuro: (n: number) => string
+}
+
+function StackedTooltip({ active, payload, label, prets, colorByPret, formatEuro }: StackedTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null
+  const mois = typeof label === 'number' ? label : 0
+  const annees = (mois / 12).toFixed(1)
+  const total = payload.reduce((s, item) => s + (Number(item.value) || 0), 0)
+
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%)',
+        border: '1px solid #CBD5E1',
+        borderRadius: 8,
+        boxShadow: '0 6px 24px rgba(15,23,42,0.12), 0 2px 6px rgba(15,23,42,0.06)',
+        padding: '10px 12px',
+        fontSize: 12,
+        fontFamily: 'inherit',
+        minWidth: 200,
+      }}
+    >
+      <div style={{ fontSize: 11, color: '#64748B', fontWeight: 500, marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        Mois {mois} · {annees} ans
+      </div>
+      {/* Total mis en avant en haut */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        padding: '6px 0', borderBottom: '1px dashed #CBD5E1', marginBottom: 6,
+      }}>
+        <span style={{ fontWeight: 700, color: '#0A1F3D' }}>Mensualité totale</span>
+        <span style={{ fontWeight: 800, fontSize: 14, color: '#92704A', fontVariantNumeric: 'tabular-nums' }}>
+          {formatEuro(total)}
+        </span>
+      </div>
+      {/* Détail par prêt (filtré pour les prêts qui contribuent à ce mois) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {payload.map((item) => {
+          const value = Number(item.value) || 0
+          if (value <= 0) return null
+          const id = (item.name ?? '').replace('pret_', '')
+          const p = prets.find((x) => x.id === id)
+          if (!p) return null
+          const color = colorByPret[id] ?? '#0A1F3D'
+          return (
+            <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#475569' }}>
+                <span style={{
+                  display: 'inline-block', width: 10, height: 10, borderRadius: 2,
+                  background: color, boxShadow: 'inset 0 0 0 1px rgba(15,23,42,0.15)',
+                }} />
+                {p.libelle ?? PRET_TYPE_LABEL[p.type]}
+              </span>
+              <span style={{ fontWeight: 600, color: '#0A1F3D', fontVariantNumeric: 'tabular-nums' }}>
+                {formatEuro(value)}
+              </span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
