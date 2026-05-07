@@ -7,7 +7,9 @@ import {
   PRET_TYPE_LABEL, PRET_STATUT_LABEL, GARANTIE_LABEL, PRET_PROFIL_LABEL,
   type Banque,
 } from '@/data/mock'
-import { calcMensualite, calcMensualiteAssurance } from '@/lib/finance'
+import { calcMensualite, calcMensualiteAssurance, calcTAEG, calcTAEA } from '@/lib/finance'
+import { validatePtz, type PtzValidationInput, type PtzValidation } from '@/lib/ptz'
+import type { Dossier, Client } from '@/data/mock'
 
 type Props = {
   open: boolean
@@ -18,6 +20,10 @@ type Props = {
   /** Pour le rang de tri à la création (= prets.length actuels). */
   defaultRang?: number
   banques: Banque[]
+  /** Dossier pour les règles métier (PTZ, TAEG…). */
+  dossier?: Dossier
+  /** Client pour la composition foyer (PTZ). */
+  client?: Client
   onClose: () => void
   onSave: (data: Pret | Omit<Pret, 'id' | 'createdAt' | 'updatedAt'>) => void
   onDelete?: () => void
@@ -37,7 +43,7 @@ const PROFILS_ORDER: PretProfilAmortissement[] = ['standard', 'paliers_lissage',
 const STATUTS_ORDER: PretStatut[] = ['propose', 'accorde', 'offre_editee', 'signe', 'refuse', 'abandonne']
 const GARANTIES_ORDER: GarantieType[] = ['credit_logement', 'hypotheque', 'ppd', 'caution_autre', 'nantissement', 'autre']
 
-export default function PretEditor({ open, pret, dossierId, defaultRang = 0, banques, onClose, onSave, onDelete }: Props) {
+export default function PretEditor({ open, pret, dossierId, defaultRang = 0, banques, dossier, client, onClose, onSave, onDelete }: Props) {
   const isEdit = !!pret
 
   const buildState = () => {
@@ -115,6 +121,65 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
 
   const mensualiteTot = mensualiteHA + mensualiteAss
 
+  // Frais initiaux pris en compte dans le TAEG (article R.314-4 CCons.)
+  const fraisInit = (f.fraisDossier ?? 0) + (f.fraisBanque ?? 0) + (f.garantieMontant ?? 0)
+
+  const taeg = useMemo(
+    () => calcTAEG(f.montant, mensualiteHA, f.dureeMois, fraisInit),
+    [f.montant, f.dureeMois, mensualiteHA, fraisInit],
+  )
+  const taea = useMemo(
+    () => calcTAEA(f.montant, mensualiteHA, mensualiteAss, f.dureeMois, fraisInit),
+    [f.montant, f.dureeMois, mensualiteHA, mensualiteAss, fraisInit],
+  )
+
+  // Validation PTZ — calculée en live quand le type est PTZ et que le dossier est dispo
+  const ptzValidation: PtzValidation | null = useMemo(() => {
+    if (f.type !== 'ptz') return null
+    if (!dossier) return null
+
+    // Données extraites du dossier (zone, RFR, etc.)
+    const zone = (dossier as unknown as { ptzZone?: 'A_bis' | 'A' | 'B1' | 'B2' | 'C' }).ptzZone ?? null
+    const isNeufCollectif = dossier.typeAchat === 'Neuf' || dossier.typeAchat === 'VEFA'
+    const isAncienAvecTravaux = (dossier.typeAchat === 'Ancien' || dossier.typeAchat === 'Travaux')
+    const nature: PtzValidationInput['nature'] = isNeufCollectif ? 'neuf_collectif' : isAncienAvecTravaux ? 'ancien_avec_travaux' : null
+
+    // Composition foyer : emprunteur + co-emprunteur + enfants
+    const e1 = dossier.emprunteur1 as { enfantsACharge?: number; primoAccedant?: boolean } | undefined
+    const enfants = e1?.enfantsACharge ?? 0
+    const nbAdultes = dossier.emprunteur2 ? 2 : 1
+    const nbOccupants = nbAdultes + enfants
+
+    // Primo-accédant : champ explicite emprunteur1.primoAccedant (à ajouter)
+    const primo = e1?.primoAccedant === true
+
+    // RFR-N-2 : on prend le rfReferenceN2 du dossier, fallback rfMenage / rfReferenceN1
+    const rfr = dossier.rfReferenceN2 ?? dossier.rfReferenceN1 ?? dossier.rfMenage ?? 0
+
+    // Coût opération
+    const coutOp = (dossier.coutLogement ?? dossier.montantBien ?? 0)
+      + (dossier.coutTerrain ?? 0)
+      + (dossier.coutTravaux ?? 0)
+      + (dossier.fraisNotaire ?? 0)
+      + (dossier.fraisAgence ?? 0)
+    const coutTrav = dossier.coutTravaux ?? 0
+
+    return validatePtz({
+      zone,
+      nature,
+      destination: dossier.destination ?? null,
+      primoAccedant: primo,
+      rfrFoyer: rfr,
+      nbOccupants,
+      coutOperation: coutOp,
+      coutTravaux: coutTrav,
+      ville: dossier.villeBien ?? null,
+    })
+  }, [f.type, dossier])
+
+  // Auto-fill durée + différé pour PTZ si tranche déterminée
+  const ptzAutoFilled = useMemo(() => Boolean(f.type === 'ptz' && ptzValidation?.tranche != null), [f.type, ptzValidation])
+
   const submit = (e?: FormEvent) => {
     e?.preventDefault()
     if (f.montant <= 0) {
@@ -123,6 +188,23 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
     }
     if (f.dureeMois <= 0) {
       toast.error('La durée doit être > 0 mois')
+      return
+    }
+
+    // Validation PTZ : bloque la création si non éligible (sauf override admin futur)
+    if (f.type === 'ptz' && ptzValidation && !ptzValidation.eligible) {
+      toast.error('PTZ non éligible', {
+        description: ptzValidation.blocages[0] ?? 'Conditions non remplies',
+        duration: 8000,
+      })
+      return
+    }
+    // Vérifie que le montant PTZ ne dépasse pas le max calculé
+    if (f.type === 'ptz' && ptzValidation && ptzValidation.eligible && f.montant > ptzValidation.montantMax) {
+      toast.error(`Montant PTZ trop élevé`, {
+        description: `Maximum autorisé : ${ptzValidation.montantMax.toLocaleString('fr-FR')} €`,
+        duration: 8000,
+      })
       return
     }
 
@@ -144,6 +226,8 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
       mensualiteHorsAssurance: mensualiteHA || undefined,
       mensualiteAssurance: mensualiteAss || undefined,
       mensualiteTotale: mensualiteTot || undefined,
+      // TAEG/TAEA calculés à la sauvegarde (recalculés à l'affichage si paramètres changent)
+      taeg: taeg > 0 ? Number(taeg.toFixed(3)) : undefined,
       differeAmortissement: f.differeAmortissement || undefined,
       differeTotal: f.differeTotal || undefined,
       revisable: f.revisable || undefined,
@@ -325,6 +409,100 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
             Calcul auto à partir du montant, du taux et de la durée. Les mensualités saisies manuellement écrasent le calcul.
           </div>
         </div>
+
+        {/* TAEG / TAEA — calcul actuariel conforme art. R.314-3 CCons. */}
+        <div className="rounded-lg bg-gradient-to-br from-gold-50/40 to-white border border-gold-200 p-3">
+          <div className="text-[11px] text-gold-700 uppercase tracking-wider font-semibold mb-2">
+            TAEG / TAEA — Coût total réel
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <Field
+              label="TAEG"
+              value={taeg > 0 ? `${taeg.toFixed(3)} %` : '—'}
+              highlight
+            />
+            <Field
+              label="TAEA"
+              value={taea > 0 ? `${taea.toFixed(3)} %` : '—'}
+            />
+            <Field
+              label="Frais initiaux"
+              value={`${fraisInit.toLocaleString('fr-FR')} €`}
+            />
+          </div>
+          <div className="text-[10px] text-navy-500 mt-2">
+            <strong>TAEG</strong> = taux + frais (dossier, garantie, banque) — hors assurance facultative.
+            <strong> TAEA</strong> = coût annuel de l'ADI ramené en taux équivalent.
+          </div>
+        </div>
+
+        {/* Validation PTZ — bandeau coloré selon éligibilité */}
+        {ptzValidation && (
+          <div className={`rounded-lg border p-3 ${
+            ptzValidation.eligible
+              ? 'bg-emerald-50/40 border-emerald-200'
+              : 'bg-rose-50/40 border-rose-300'
+          }`}>
+            <div className={`text-[11px] uppercase tracking-wider font-semibold mb-2 ${
+              ptzValidation.eligible ? 'text-emerald-700' : 'text-rose-700'
+            }`}>
+              {ptzValidation.eligible ? '✓ PTZ éligible' : '✗ PTZ non éligible'}
+            </div>
+
+            {ptzValidation.eligible && (
+              <>
+                <div className="grid grid-cols-3 gap-4 mb-2">
+                  <Field label="Tranche" value={ptzValidation.tranche ? `Tranche ${ptzValidation.tranche}` : '—'} />
+                  <Field label="Quotité" value={`${(ptzValidation.quotite * 100).toFixed(0)} %`} />
+                  <Field label="Montant max" value={`${ptzValidation.montantMax.toLocaleString('fr-FR')} €`} highlight />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Durée totale" value={`${ptzValidation.dureeMois / 12} ans`} />
+                  <Field label="Différé d'amortissement" value={ptzValidation.differeMois > 0 ? `${ptzValidation.differeMois / 12} ans` : 'Aucun'} />
+                </div>
+                {f.montant > 0 && f.montant > ptzValidation.montantMax && (
+                  <div className="mt-2 text-xs text-rose-700 bg-rose-100 rounded p-2">
+                    ⚠️ Montant saisi ({f.montant.toLocaleString('fr-FR')} €) supérieur au montant PTZ max autorisé ({ptzValidation.montantMax.toLocaleString('fr-FR')} €).
+                  </div>
+                )}
+                {f.dureeMois !== ptzValidation.dureeMois && ptzAutoFilled && (
+                  <button
+                    type="button"
+                    onClick={() => setF({ ...f, dureeMois: ptzValidation.dureeMois, differeAmortissement: ptzValidation.differeMois, tauxNominal: 0 })}
+                    className="mt-2 text-xs text-gold-700 hover:underline"
+                  >
+                    → Pré-remplir durée {ptzValidation.dureeMois / 12} ans + différé {ptzValidation.differeMois / 12} ans + taux 0 %
+                  </button>
+                )}
+              </>
+            )}
+
+            {ptzValidation.blocages.length > 0 && (
+              <div className="mt-2 text-xs text-rose-700 space-y-1">
+                <div className="font-semibold">Blocages :</div>
+                <ul className="list-disc pl-4">
+                  {ptzValidation.blocages.map((b, i) => <li key={i}>{b}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {ptzValidation.warnings.length > 0 && (
+              <div className="mt-2 text-xs text-amber-800 space-y-1">
+                <div className="font-semibold">⚠️ Avertissements :</div>
+                <ul className="list-disc pl-4">
+                  {ptzValidation.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              </div>
+            )}
+
+            <div className="text-[10px] text-navy-500 mt-2 italic">
+              Réglementation : arrêté du 28 décembre 2023, modifié 1er avril 2024.
+              <a href="https://www.service-public.fr/particuliers/vosdroits/F10871" target="_blank" rel="noopener" className="ml-1 text-gold-700 hover:underline">
+                Détails ↗
+              </a>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           <div>

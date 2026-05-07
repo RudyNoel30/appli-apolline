@@ -201,6 +201,7 @@ export const dossiers = pgTable('dossiers', {
   typeLogement: text('type_logement'),
   compromisSigne: boolean('compromis_signe'),
   actePrevuLe: text('acte_prevu_le'),
+  ptzZone: text('ptz_zone'),
 
   coutTerrain: integer('cout_terrain'),
   coutLogement: integer('cout_logement'),

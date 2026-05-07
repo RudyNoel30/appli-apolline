@@ -192,6 +192,8 @@ export type Emprunteur = {
   regimeMatrimonial: RegimeMatrimonial
   enfantsACharge: number
   rgpdAccord: boolean
+  /** Primo-accédant : pas propriétaire de sa RP les 2 dernières années (PTZ). */
+  primoAccedant?: boolean
   // Profession
   profession: string
   typeContrat: TypeContrat
@@ -297,6 +299,9 @@ export type Dossier = {
   typeLogement?: TypeLogement
   compromisSigne?: boolean
   actePrevuLe?: string
+
+  /** Zone PTZ du bien (A bis / A / B1 / B2 / C) — détermine plafonds & quotités. */
+  ptzZone?: 'A_bis' | 'A' | 'B1' | 'B2' | 'C'
 
   // Coûts d'acquisition détaillés
   coutTerrain?: number

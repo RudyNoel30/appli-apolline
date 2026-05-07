@@ -9,7 +9,7 @@ import {
 import FactureFormModal from '@/components/FactureFormModal'
 import StatusBadge from '@/components/StatusBadge'
 import { factures as facturesApi, type Facture, pieces as piecesApi } from '@/db/api'
-import { effectiveMensualite } from '@/lib/finance'
+import { effectiveMensualite, calcTAEG, calcTAEA } from '@/lib/finance'
 import Modal from '@/components/Modal'
 import AiPreviewModal from '@/components/AiPreviewModal'
 import DossierEditor from '@/components/DossierEditor'
@@ -909,6 +909,8 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
                   <th className="table-th text-right">Montant</th>
                   <th className="table-th text-center">Durée</th>
                   <th className="table-th text-right">Taux</th>
+                  <th className="table-th text-right">TAEG</th>
+                  <th className="table-th text-right">TAEA</th>
                   <th className="table-th text-right">Mens. tot.</th>
                   <th className="table-th text-center">Statut</th>
                   <th className="table-th w-10"></th>
@@ -944,6 +946,22 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
                     <td className="table-td text-right font-mono text-xs">
                       {p.tauxNominal != null ? pct(p.tauxNominal / 100, 2) : '—'}
                     </td>
+                    <td className="table-td text-right font-mono text-xs">
+                      {(() => {
+                        const eff = effectiveMensualite(p)
+                        const fraisInit = (p.fraisDossier ?? 0) + (p.fraisBanque ?? 0) + (p.garantieMontant ?? 0)
+                        const taeg = eff.horsAssurance > 0 ? calcTAEG(p.montant, eff.horsAssurance, p.dureeMois, fraisInit) : 0
+                        return taeg > 0 ? `${taeg.toFixed(2)} %` : '—'
+                      })()}
+                    </td>
+                    <td className="table-td text-right font-mono text-xs text-navy-500">
+                      {(() => {
+                        const eff = effectiveMensualite(p)
+                        const fraisInit = (p.fraisDossier ?? 0) + (p.fraisBanque ?? 0) + (p.garantieMontant ?? 0)
+                        const taea = eff.assurance > 0 ? calcTAEA(p.montant, eff.horsAssurance, eff.assurance, p.dureeMois, fraisInit) : 0
+                        return taea > 0 ? `${taea.toFixed(2)} %` : '—'
+                      })()}
+                    </td>
                     <td className="table-td text-right font-mono text-xs text-gold-700">
                       {effectiveMensualite(p).totale > 0 ? eur(effectiveMensualite(p).totale) : '—'}
                     </td>
@@ -961,6 +979,8 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
                 <tr className="bg-ivory border-t-2 border-navy-200">
                   <td className="table-td font-semibold text-navy-900" colSpan={2}>Total</td>
                   <td className="table-td text-right font-mono font-bold">{eur(totalEmprunte)}</td>
+                  <td className="table-td"></td>
+                  <td className="table-td"></td>
                   <td className="table-td"></td>
                   <td className="table-td"></td>
                   <td className="table-td text-right font-mono font-bold text-gold-700">{eur(mensualiteTotale)}</td>
@@ -1007,6 +1027,7 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
         dossierId={dossier.id}
         defaultRang={prets.length}
         banques={banques}
+        dossier={dossier}
         onClose={() => { setEditorOpen(false); setEditingPret(undefined) }}
         onSave={handleSave}
         onDelete={editingPret ? handleDelete : undefined}

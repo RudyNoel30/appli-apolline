@@ -46,6 +46,7 @@ type EditorState = {
   compromisSigne: boolean
   actePrevuLe: string
   villeBien: string
+  ptzZone: 'A_bis' | 'A' | 'B1' | 'B2' | 'C' | ''
   // Coûts
   coutTerrain: number
   coutLogement: number
@@ -118,6 +119,7 @@ function dossierToState(dossier: Dossier, client: Client): EditorState {
     compromisSigne: dossier.compromisSigne ?? false,
     actePrevuLe: dossier.actePrevuLe ?? '',
     villeBien: dossier.villeBien,
+    ptzZone: dossier.ptzZone ?? '',
     coutTerrain: dossier.coutTerrain ?? 0,
     coutLogement: dossier.coutLogement ?? dossier.montantBien,
     coutTravaux: dossier.coutTravaux ?? 0,
@@ -242,6 +244,7 @@ export default function DossierEditor({
       compromisSigne: s.compromisSigne,
       actePrevuLe: s.actePrevuLe,
       villeBien: s.villeBien,
+      ptzZone: s.ptzZone || undefined,
       coutTerrain: s.coutTerrain,
       coutLogement: s.coutLogement,
       coutTravaux: s.coutTravaux,
@@ -446,18 +449,20 @@ function Field({ label, value, onChange, type = 'text', placeholder, required, s
   )
 }
 
-function Select<T extends string>({ label, value, onChange, options, span = 1 }: {
+function Select<T extends string>({ label, value, onChange, options, optionLabels, span = 1 }: {
   label: string
   value: T
   onChange: (v: T) => void
   options: readonly T[] | T[]
+  /** Mapping optionnel value → label affiché (sinon affiche la value brute). */
+  optionLabels?: Record<string, string>
   span?: 1 | 2 | 3 | 4 | 6
 }) {
   return (
     <div className={`col-span-${span}`}>
       <label className="label">{label}</label>
       <select className="input" value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {options.map((o) => <option key={o} value={o}>{optionLabels?.[o] ?? o}</option>)}
       </select>
     </div>
   )
@@ -557,6 +562,12 @@ function EmprunteurIdentite({ e, updateE, title, hideHeader }: {
       </div>
       <Toggle label="Accord de recueil des données personnelles obtenu (RGPD)"
         value={e.rgpdAccord} onChange={(v) => updateE('rgpdAccord', v)} span={6} />
+      <Toggle
+        label="Primo-accédant (n'a pas été propriétaire de sa résidence principale les 2 dernières années)"
+        value={e.primoAccedant ?? false}
+        onChange={(v) => updateE('primoAccedant', v)}
+        span={6}
+      />
     </Group>
   )
 }
@@ -885,6 +896,13 @@ function SectionProjet({ s, update, coutTotal }: {
             </label>
           </div>
           <Field label="Acte prévu le" type="date" value={s.actePrevuLe} onChange={(v) => update('actePrevuLe', v)} />
+          <Select
+            label="Zone PTZ (géographique)"
+            value={s.ptzZone ?? ''}
+            onChange={(v) => update('ptzZone', v as 'A_bis' | 'A' | 'B1' | 'B2' | 'C' | '')}
+            options={['', 'A_bis', 'A', 'B1', 'B2', 'C']}
+            optionLabels={{ '': '— À renseigner', 'A_bis': 'A bis (Paris+)', 'A': 'A (IDF, Côte d\'Azur…)', 'B1': 'B1 (>250k hab)', 'B2': 'B2 (50-250k hab)', 'C': 'C (zones détendues)' }}
+          />
         </div>
       </Group>
 
