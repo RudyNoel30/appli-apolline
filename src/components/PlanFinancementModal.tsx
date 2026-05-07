@@ -9,7 +9,7 @@
  *  - Régénérer le plan (reset des paliers)
  *  - Éditer manuellement chaque palier (V2 — pour l'instant: lecture seule)
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { X, Sparkles, RefreshCw, FileText, Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Pret, Dossier } from '@/data/mock'
@@ -317,18 +317,17 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
                   )}
                 </div>
               )}
-              {/* Le chart prend 100% de la hauteur dispo, plus de scrollbar interne */}
-              <div className="flex-1 p-3 min-h-0">
-                {view === 'graphique' && (
-                  <PretsChart prets={prets} mode="mensualites_stacked" height="100%" />
+              {/* Slot mesuré explicitement en pixels (ResizeObserver) — Recharts
+                  refuse de rendre quand height='100%' dans certains contextes flex */}
+              <ChartSlot>
+                {(h) => (
+                  <>
+                    {view === 'graphique' && <PretsChart prets={prets} mode="mensualites_stacked" height={h} />}
+                    {view === 'mensualites' && <PretsChart prets={prets} mode="mensualites" height={h} />}
+                    {view === 'amortissement' && <PretsChart prets={prets} mode="amortissement" height={h} />}
+                  </>
                 )}
-                {view === 'mensualites' && (
-                  <PretsChart prets={prets} mode="mensualites" height="100%" />
-                )}
-                {view === 'amortissement' && (
-                  <PretsChart prets={prets} mode="amortissement" height="100%" />
-                )}
-              </div>
+              </ChartSlot>
             </div>
           </div>
 
@@ -395,6 +394,39 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
 }
 
 // ─── Composants utilitaires ──────────────────────────────────────────────────
+
+/**
+ * ChartSlot — wrapper qui mesure sa propre hauteur via ResizeObserver et passe
+ * un nombre de pixels (jamais une string) à son enfant. Évite le bug Recharts
+ * où ResponsiveContainer mesure son parent à 0 dans un layout flex pas encore
+ * stabilisé. Tant que la mesure n'est pas faite, on garde une hauteur de
+ * réserve (320 px) pour que le chart rende quand même quelque chose.
+ */
+function ChartSlot({ children }: { children: (h: number) => React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [h, setH] = useState(320)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      // On retire le padding (p-3 = 12px haut + 12px bas) car le child
+      // s'attend à recevoir la hauteur intérieure utile.
+      const next = Math.max(200, Math.floor(entry.contentRect.height))
+      setH((prev) => (Math.abs(prev - next) > 1 ? next : prev))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <div ref={ref} className="flex-1 p-3 min-h-0 overflow-hidden">
+      {children(h)}
+    </div>
+  )
+}
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
