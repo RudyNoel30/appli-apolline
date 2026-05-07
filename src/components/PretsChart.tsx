@@ -348,36 +348,82 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
   }
 
   if (mode === 'mensualites_stacked') {
-    // AreaChart empilé pour visualiser le lissage : chaque prêt occupe une
-    // bande de hauteur = sa mensualité du moment. Le sommet de la stack = la
-    // mensualité totale (idéalement plate si plan lissé).
-
-    // Calcule le max des totaux pour serrer le domaine Y au plus juste —
-    // évite que recharts auto-cale à un range trop large qui écrase le graphique.
+    // ─────────────────────────────────────────────────────────────────────
+    // Vue Cifacil : AreaChart empilé montrant la composition de la mensualité
+    // mois par mois. Chaque bande = un prêt. Sommet de la stack = mensualité
+    // totale du foyer. Si le plan est lissé, la stack a un sommet plat.
+    //
+    // Choix visuels (alignés sur la maquette client) :
+    //  • Fond panel gris clair (#F1F5F9) pour faire ressortir les bandes
+    //  • Pas de légende (la table des prêts au-dessus joue ce rôle)
+    //  • Pas de ligne "total" en pointillés (le sommet plat la montre déjà)
+    //  • Bandes opaques avec contour fin pour un rendu net (pas de transparence)
+    //  • Y axis en pas de 250 € (ou 500 € si plan > 4000 €), max snap au 250 €
+    //  • X axis en années entières, tous les 2 ans pour aérer
+    //  • Step-after type pour marquer franchement les transitions de paliers
+    // ─────────────────────────────────────────────────────────────────────
     const maxTotal = data.reduce((m, d) => Math.max(m, Number(d.total) || 0), 0)
-    const yMax = maxTotal > 0 ? Math.ceil((maxTotal * 1.15) / 100) * 100 : 1000
+    // Snap au 250 € supérieur, ou au 500 € si > 4000 €
+    const ySnap = maxTotal > 4000 ? 500 : 250
+    const yMax = maxTotal > 0
+      ? Math.ceil((maxTotal * 1.10) / ySnap) * ySnap
+      : 1000
+
+    // Génère les ticks Y au pas ySnap (0, 250, 500, ..., yMax)
+    const yTicks: number[] = []
+    for (let v = 0; v <= yMax; v += ySnap) yTicks.push(v)
+
+    // Ticks X en années pleines, tous les 2 ans (ou tous les ans si durée < 12 ans)
+    const dureeYears = Math.ceil(dureeMax / 12)
+    const xStep = dureeYears > 12 ? 2 : 1
+    const xTicks: number[] = []
+    for (let y = 0; y <= dureeYears; y += xStep) xTicks.push(y * 12)
+
+    const formatYearsClean = (m: number) => `${Math.round(m / 12)}`
 
     return (
       <div style={{ ...wrapperStyle, minHeight: 280 }}>
         <ResponsiveContainer width="100%" height="100%" debounce={1}>
-          <AreaChart data={data} margin={{ top: 30, right: 24, left: 8, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+          <AreaChart
+            data={data}
+            margin={{ top: 12, right: 16, left: 4, bottom: 24 }}
+          >
+            {/* CartesianGrid avec fill = panel gris clair façon Cifacil */}
+            <CartesianGrid
+              strokeDasharray="2 4"
+              stroke="#CBD5E1"
+              fill="#F1F5F9"
+              fillOpacity={1}
+              vertical={true}
+              horizontal={true}
+            />
             <XAxis
               dataKey="mois"
               type="number"
               domain={[0, dureeMax]}
-              tickFormatter={formatYears}
-              tick={{ fontSize: 11, fill: '#64748B' }}
-              ticks={Array.from({ length: Math.ceil(dureeMax / 12) + 1 }, (_, i) => i * 12).filter((m) => m <= dureeMax)}
+              ticks={xTicks}
+              tickFormatter={formatYearsClean}
+              tick={{ fontSize: 11, fill: '#475569' }}
+              axisLine={{ stroke: '#94A3B8' }}
+              tickLine={{ stroke: '#94A3B8' }}
+              label={{
+                value: 'Années',
+                position: 'insideBottom',
+                offset: -8,
+                style: { fontSize: 11, fill: '#64748B', fontWeight: 500 },
+              }}
             />
             <YAxis
               domain={[0, yMax]}
-              tickFormatter={formatEuro}
-              tick={{ fontSize: 11, fill: '#64748B' }}
-              width={60}
+              ticks={yTicks}
+              tickFormatter={(v) => `${Math.round(v).toLocaleString('fr-FR')} €`}
+              tick={{ fontSize: 11, fill: '#475569' }}
+              axisLine={{ stroke: '#94A3B8' }}
+              tickLine={{ stroke: '#94A3B8' }}
+              width={68}
             />
             <Tooltip
-              labelFormatter={(m) => `Mois ${m} (~${(m / 12).toFixed(1)} ans)`}
+              labelFormatter={(m) => `${formatYearsClean(m)} ans (mois ${m})`}
               formatter={(value: number, name: string) => {
                 if (name === 'total') return [formatEuro(value), 'Mensualité totale']
                 const id = name.replace('pret_', '')
@@ -385,44 +431,28 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
                 if (!p) return [formatEuro(value), name]
                 return [formatEuro(value), p.libelle ?? PRET_TYPE_LABEL[p.type]]
               }}
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}
-            />
-            <Legend
-              verticalAlign="top"
-              height={28}
-              iconType="square"
-              formatter={(value: string) => {
-                if (value === 'total') return null
-                const id = value.replace('pret_', '')
-                const p = sorted.find((x) => x.id === id)
-                if (!p) return value
-                return p.libelle ?? PRET_TYPE_LABEL[p.type]
+              contentStyle={{
+                fontSize: 12,
+                borderRadius: 6,
+                border: '1px solid #CBD5E1',
+                boxShadow: '0 4px 12px rgba(15,23,42,0.08)',
               }}
+              cursor={{ fill: 'rgba(201,169,97,0.08)' }}
             />
-            {/* Stack par prêt — type "step" pour bien marquer les paliers */}
+            {/* Stack par prêt — bandes opaques, contour navy foncé pour un look net */}
             {sorted.map((p) => (
               <Area
                 key={p.id}
                 type="stepAfter"
                 dataKey={`pret_${p.id}`}
                 stackId="mens"
-                stroke={colorByPret[p.id]}
+                stroke="#0A1F3D"
+                strokeWidth={0.75}
                 fill={colorByPret[p.id]}
-                fillOpacity={0.92}
-                strokeWidth={1.5}
+                fillOpacity={1}
                 isAnimationActive={false}
               />
             ))}
-            {/* Ligne du total en pointillés gold pour bien voir si c'est plat */}
-            <Line
-              type="stepAfter"
-              dataKey="total"
-              stroke="#C9A961"
-              strokeWidth={2.5}
-              strokeDasharray="6 3"
-              dot={false}
-              isAnimationActive={false}
-            />
           </AreaChart>
         </ResponsiveContainer>
       </div>
