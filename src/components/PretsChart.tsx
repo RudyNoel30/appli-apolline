@@ -42,12 +42,20 @@ function lighten(hex: string, amount = 0.2): string {
 }
 
 /**
- * Capital restant dû à la fin du mois t pour un prêt amortissable classique.
- * Formule : KRD(t) = M * ((1+i)^N - (1+i)^t) / ((1+i)^N - 1)
- * où i = taux périodique, N = durée totale, t = mois écoulés.
+ * Capital restant dû à la fin du mois t.
  *
- * Pour le PTZ avec différé total : 0 € de remboursement pendant la phase de
- * différé puis amortissement linéaire sur la durée restante.
+ * Trois cas selon le profil du prêt :
+ *
+ *   1. PALIERS (lisseur) : récurrence segment par segment. La formule
+ *      classique ne marche PAS car la mensualité change. On applique :
+ *        KRD_n = KRD_0 * (1+i)^n - mens_palier * ((1+i)^n - 1) / i
+ *      sur chaque palier successif.
+ *
+ *   2. PRÊT STANDARD à mensualités constantes :
+ *        KRD(t) = M * ((1+i)^N - (1+i)^t) / ((1+i)^N - 1)
+ *
+ *   3. DIFFÉRÉ TOTAL (PTZ phase 1) : KRD inchangé pendant le différé,
+ *      puis amortissement classique sur la durée restante.
  */
 function krdAt(p: Pret, mois: number): number {
   if (mois <= 0) return p.montant
@@ -60,7 +68,34 @@ function krdAt(p: Pret, mois: number): number {
   const differeT = p.differeTotal ?? 0
   if (mois < differeT) return p.montant
 
-  // Phase d'amortissement : durée effective = total - différé
+  // ─── CAS PALIERS (lisseur) ───────────────────────────────────────────
+  // La mensualité change à chaque palier → on intègre par récurrence
+  // segment par segment. Cf. formule de récurrence sur capital remboursé :
+  //   KRD_{après n mens} = KRD * (1+i)^n - M * [(1+i)^n - 1] / i
+  if (p.paliers && p.paliers.length > 0) {
+    const sortedPaliers = [...p.paliers].sort((a, b) => a.rang - b.rang)
+    let krd = p.montant
+    let cur = differeT  // début de la phase d'amortissement
+    for (const palier of sortedPaliers) {
+      if (mois <= cur) break
+      const segEnd = cur + palier.nombreMois
+      const monthsInSeg = Math.min(mois, segEnd) - cur
+      // Mensualité d'amortissement = uniquement la part hors assurance
+      // (l'assurance n'amortit pas le capital).
+      const mens = palier.echeanceHorsAssurance ?? 0
+      if (i === 0) {
+        krd = krd - mens * monthsInSeg
+      } else {
+        const pow = Math.pow(1 + i, monthsInSeg)
+        krd = krd * pow - mens * (pow - 1) / i
+      }
+      cur = segEnd
+      if (mois <= cur) break
+    }
+    return Math.max(0, krd)
+  }
+
+  // ─── CAS STANDARD : annuités constantes ──────────────────────────────
   const moisAmort = p.dureeMois - differeT
   const t = mois - differeT
 
@@ -95,8 +130,9 @@ function decomposeMois(p: Pret, mois: number): { interet: number; capital: numbe
   const krdAvant = krdAt(p, mois - 1)
   const interet = krdAvant * i
 
-  // Mensualité du mois courant — gère paliers (on regarde le mois - 1 pour
-  // être cohérent avec l'index "fin de mois" utilisé partout)
+  // Mensualité du mois courant — gère paliers. CRUCIAL : on utilise
+  // UNIQUEMENT echeanceHorsAssurance (pas avec assurance) car l'assurance
+  // n'amortit pas le capital (c'est un service séparé).
   let mens: number
   if (p.paliers && p.paliers.length > 0) {
     let cumul = 0
@@ -104,13 +140,15 @@ function decomposeMois(p: Pret, mois: number): { interet: number; capital: numbe
     for (const palier of [...p.paliers].sort((a, b) => a.rang - b.rang)) {
       cumul += palier.nombreMois
       if (mois - differeT <= cumul) {
-        found = palier.echeanceAvecAssurance ?? palier.echeanceHorsAssurance ?? 0
+        found = palier.echeanceHorsAssurance ?? 0
         break
       }
     }
     mens = found ?? 0
   } else {
-    mens = p.mensualiteHorsAssurance ?? p.mensualiteTotale ?? 0
+    // Pour décomposition capital/intérêts, on prend explicitement HA (jamais totale)
+    mens = p.mensualiteHorsAssurance ?? 0
+    // Si pas stocké, on calculera à la volée plus bas via le bloc fallback
   }
 
   // Si la mensualité n'est pas renseignée mais qu'on a tout ce qu'il faut,
@@ -127,9 +165,13 @@ function decomposeMois(p: Pret, mois: number): { interet: number; capital: numbe
 }
 
 /**
- * Mensualité du prêt à un instant t (utile pour les paliers).
- * Pour un prêt à mensualités constantes, retourne la mensualité totale cumulée.
- * Pour un prêt à paliers, retourne la mensualité du palier en cours.
+ * Mensualité du prêt à un instant t (en HORS ASSURANCE).
+ * Pour un prêt à mensualités constantes, retourne la mensualité fixe HA.
+ * Pour un prêt à paliers, retourne la mensualité HA du palier en cours.
+ *
+ * ⚠ On reste TOUJOURS en hors assurance pour rester cohérent avec
+ *   `optimiserLissage` (qui calcule la cible en HA) et avec le KRD calculé
+ *   par `krdAt` (qui amortit avec la mens HA).
  */
 function mensualiteAt(p: Pret, mois: number): number {
   if (mois >= p.dureeMois) return 0
@@ -138,19 +180,20 @@ function mensualiteAt(p: Pret, mois: number): number {
   const differeT = p.differeTotal ?? 0
   if (mois < differeT) return 0
 
-  // Si paliers définis, on suit les paliers
+  // Si paliers définis, on suit les paliers (HA uniquement)
   if (p.paliers && p.paliers.length > 0) {
     let cumul = 0
     for (const palier of [...p.paliers].sort((a, b) => a.rang - b.rang)) {
       if (mois < cumul + palier.nombreMois) {
-        return palier.echeanceAvecAssurance ?? palier.echeanceHorsAssurance ?? 0
+        return palier.echeanceHorsAssurance ?? 0
       }
       cumul += palier.nombreMois
     }
     return 0
   }
 
-  return p.mensualiteTotale ?? p.mensualiteHorsAssurance ?? 0
+  // Mensualité fixe HA (jamais totale qui inclurait l'assurance)
+  return p.mensualiteHorsAssurance ?? 0
 }
 
 export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props) {
