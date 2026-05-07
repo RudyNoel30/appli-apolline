@@ -347,10 +347,17 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
     // AreaChart empilé pour visualiser le lissage : chaque prêt occupe une
     // bande de hauteur = sa mensualité du moment. Le sommet de la stack = la
     // mensualité totale (idéalement plate si plan lissé).
+
+    // Calcule le max des totaux pour serrer le domaine Y au plus juste —
+    // évite que recharts auto-cale à un range trop large qui écrase le graphique.
+    const maxTotal = data.reduce((m, d) => Math.max(m, d.total ?? 0), 0)
+    // Marge de 15 % en haut pour laisser respirer la ligne du total + le label.
+    const yMax = Math.ceil((maxTotal * 1.15) / 100) * 100
+
     return (
       <div style={{ width: '100%', height }}>
         <ResponsiveContainer>
-          <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+          <AreaChart data={data} margin={{ top: 16, right: 24, left: 4, bottom: 32 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
             <XAxis
               dataKey="mois"
@@ -359,12 +366,13 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               tickFormatter={formatYears}
               tick={{ fontSize: 11, fill: '#64748B' }}
               ticks={Array.from({ length: Math.ceil(dureeMax / 12) + 1 }, (_, i) => i * 12).filter((m) => m <= dureeMax)}
-              label={{ value: 'Années', position: 'insideBottom', offset: -2, style: { fontSize: 10, fill: '#94A3B8' } }}
+              label={{ value: 'Années', position: 'insideBottom', offset: -8, style: { fontSize: 10, fill: '#94A3B8' } }}
             />
             <YAxis
+              domain={[0, yMax]}
               tickFormatter={formatEuro}
               tick={{ fontSize: 11, fill: '#64748B' }}
-              label={{ value: 'Échéance / mois', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#94A3B8' } }}
+              width={56}
             />
             <Tooltip
               labelFormatter={(m) => `Mois ${m} (~${(m / 12).toFixed(1)} ans)`}
@@ -378,8 +386,9 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}
             />
             <Legend
-              verticalAlign="top"
-              height={32}
+              verticalAlign="bottom"
+              align="center"
+              wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
               iconType="square"
               formatter={(value: string) => {
                 if (value === 'total') return null  // on cache le "total" de la légende
@@ -398,8 +407,8 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
                 stackId="mens"
                 stroke={colorByPret[p.id]}
                 fill={colorByPret[p.id]}
-                fillOpacity={0.85}
-                strokeWidth={1}
+                fillOpacity={0.92}
+                strokeWidth={1.5}
               />
             ))}
             {/* Ligne du total en pointillés gold pour bien voir si c'est plat */}
@@ -410,6 +419,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               strokeWidth={2.5}
               strokeDasharray="6 3"
               dot={false}
+              isAnimationActive={false}
             />
           </AreaChart>
         </ResponsiveContainer>
