@@ -181,10 +181,12 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
           </button>
         </header>
 
-        {/* Contenu : 2 colonnes (gauche = plan + graph, droite = KPIs) */}
-        <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden p-4 min-h-0">
+        {/* Contenu : 2 colonnes (gauche = plan + graph, droite = KPIs).
+            overflow-y-auto sur la grille → si le contenu dépasse, on scrolle
+            la modale plutôt que d'écraser le graphique. */}
+        <div className="flex-1 grid grid-cols-3 gap-4 overflow-y-auto p-4">
           {/* Colonne principale (2/3) */}
-          <div className="col-span-2 flex flex-col gap-3 overflow-hidden min-h-0">
+          <div className="col-span-2 flex flex-col gap-3">
             {/* Tableau des prêts — compact + scrollable si > 4 lignes */}
             <div className="card p-3 shrink-0">
               <div className="text-xs uppercase tracking-wider text-navy-500 font-semibold mb-2">Contenu du plan ({prets.length} prêt{prets.length > 1 ? 's' : ''})</div>
@@ -279,8 +281,10 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
               )}
             </div>
 
-            {/* Vue graphique / Mensualités / Amortissement (onglets) */}
-            <div className="card p-0 flex-1 flex flex-col overflow-hidden min-h-0">
+            {/* Vue graphique / Mensualités / Amortissement (onglets).
+                Hauteur explicite ~60% de la viewport, plancher 520 px : le
+                chart est toujours assez grand pour être lu intégralement. */}
+            <div className="card p-0 flex flex-col" style={{ height: 'max(520px, 60vh)' }}>
               <div className="border-b border-navy-100 bg-ivory/50 px-4 shrink-0">
                 <div className="flex gap-1 -mb-px">
                   <TabButton active={view === 'graphique'} onClick={() => setView('graphique')}>Vue graphique</TabButton>
@@ -331,8 +335,8 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
             </div>
           </div>
 
-          {/* Colonne KPIs (1/3) — compacte, scrollable si très long */}
-          <div className="col-span-1 flex flex-col gap-2 overflow-y-auto min-h-0 text-sm">
+          {/* Colonne KPIs (1/3) — sticky en haut pendant le scroll de la modale */}
+          <div className="col-span-1 flex flex-col gap-2 text-sm self-start sticky top-0">
             <KpiBlock title="Détail du projet" compact>
               <KpiRow label="Projet hors FN" value={eur(projetHFN)} />
               <KpiRow label="Frais de notaire" value={eur(fraisNotaire)} />
@@ -404,7 +408,9 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
  */
 function ChartSlot({ children }: { children: (h: number) => React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [h, setH] = useState(320)
+  // Initial = 460px : assez grand dès le 1er paint pour que le chart ait l'air
+  // bien dimensionné avant que le ResizeObserver mesure le slot réel.
+  const [h, setH] = useState(460)
 
   useEffect(() => {
     const el = ref.current
@@ -412,9 +418,9 @@ function ChartSlot({ children }: { children: (h: number) => React.ReactNode }) {
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
-      // On retire le padding (p-3 = 12px haut + 12px bas) car le child
-      // s'attend à recevoir la hauteur intérieure utile.
-      const next = Math.max(200, Math.floor(entry.contentRect.height))
+      // contentRect.height = hauteur intérieure (sans padding) du slot.
+      // Plancher 360 px pour garantir un graphique toujours lisible.
+      const next = Math.max(360, Math.floor(entry.contentRect.height))
       setH((prev) => (Math.abs(prev - next) > 1 ? next : prev))
     })
     ro.observe(el)

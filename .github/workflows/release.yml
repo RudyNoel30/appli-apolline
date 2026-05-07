@@ -163,7 +163,29 @@ jobs:
         shell: bash
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 700 ~/.ssh
+          if [ -z "$VPS_HOST" ]; then
+            echo "::error::secret VPS_HOST n'est pas défini"
+            exit 1
+          fi
+          # ssh-keyscan peut être flaky (timeout, SSH server slow). On retry 3x
+          # avec timeout 10s et on tolère l'échec — scp en dessous tombera sur
+          # StrictHostKeyChecking=accept-new qui ajoutera l'hôte au 1er contact.
+          set +e
+          for i in 1 2 3; do
+            ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            if [ -s ~/.ssh/known_hosts ]; then
+              echo "✓ known_hosts populé (tentative $i)"
+              break
+            fi
+            echo "ssh-keyscan tentative $i vide, retry…"
+            sleep 2
+          done
+          set -e
+          chmod 600 ~/.ssh/known_hosts 2>/dev/null || true
+          # Compte les entrées (juste pour le log, pas un check bloquant)
+          LINES=$(wc -l < ~/.ssh/known_hosts 2>/dev/null || echo 0)
+          echo "known_hosts: $LINES entrée(s)"
 
       - name: Upload MSI + sig + latest.json to VPS
         env:
@@ -173,8 +195,12 @@ jobs:
         shell: bash
         run: |
           DIR="${VPS_RELEASES_DIR:-/opt/apolline-releases}"
-          # ssh-agent est déjà chargé via webfactory action — pas besoin de -i
+          # ssh-agent chargé via webfactory action.
+          # StrictHostKeyChecking=accept-new : safety net si known_hosts est vide
+          # (ssh-keyscan a peut-être échoué) — accepte au 1er contact, pas après.
           scp \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
             "${{ steps.artifact.outputs.msi_path }}" \
             "${{ steps.artifact.outputs.sig_path }}" \
             latest.json \
@@ -234,30 +260,52 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 700 ~/.ssh
+          if [ -z "$VPS_HOST" ]; then
+            echo "::error::secret VPS_HOST n'est pas défini"
+            exit 1
+          fi
+          set +e
+          for i in 1 2 3; do
+            ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            if [ -s ~/.ssh/known_hosts ]; then
+              echo "✓ known_hosts populé (tentative $i)"
+              break
+            fi
+            echo "ssh-keyscan tentative $i vide, retry…"
+            sleep 2
+          done
+          set -e
+          chmod 600 ~/.ssh/known_hosts 2>/dev/null || true
+          LINES=$(wc -l < ~/.ssh/known_hosts 2>/dev/null || echo 0)
+          echo "known_hosts: $LINES entrée(s)"
 
       - name: Sync backend code to VPS
         env:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
+          # rsync passe ses options ssh via -e. accept-new = safety si known_hosts vide.
+          RSYNC_SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
           # Sync ciblé : src + migrations + manifests + tsconfig.
           # On NE supprime PAS de fichiers (-a sans --delete) pour ne
           # pas effacer ce qui est légitimement présent côté VPS (.env, dist/, …).
           # node_modules sur le VPS est conservé tel quel — npm ci s'occupera de l'aligner si besoin.
-          rsync -avz \
+          rsync -avz -e "$RSYNC_SSH" \
             --exclude='node_modules/' \
             --exclude='dist/' \
             --exclude='.env*' \
             apolline-backend/src/ \
             "$VPS_USER@$VPS_HOST:/opt/apolline-backend/src/"
 
-          rsync -avz \
+          rsync -avz -e "$RSYNC_SSH" \
             apolline-backend/drizzle/ \
             "$VPS_USER@$VPS_HOST:/opt/apolline-backend/drizzle/"
 
           # Manifests + config TS (à plat) — on les écrase
           scp \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
             apolline-backend/package.json \
             apolline-backend/package-lock.json \
             apolline-backend/tsconfig.json \
@@ -268,7 +316,11 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
-          ssh "$VPS_USER@$VPS_HOST" '
+          ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 \
+            "$VPS_USER@$VPS_HOST" '
             set -e
             cd /opt/apolline-backend
 
