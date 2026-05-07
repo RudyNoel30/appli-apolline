@@ -12,7 +12,8 @@ type Props = {
    *  - 'amortissement' : décomposition mensuelle capital/intérêts
    */
   mode?: 'krd' | 'mensualites' | 'mensualites_stacked' | 'amortissement'
-  height?: number
+  /** Hauteur du chart : nombre = px fixe, string = CSS (ex '100%' pour s'adapter au parent). */
+  height?: number | string
 }
 
 /**

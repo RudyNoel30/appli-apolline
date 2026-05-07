@@ -17,7 +17,6 @@ import DossierEditor from '@/components/DossierEditor'
 import TabPiecesLocal from '@/components/TabPiecesLocal'
 import OneDriveFolderPicker, { type OneDriveSelection } from '@/components/OneDriveFolderPicker'
 import PretEditor from '@/components/PretEditor'
-import PretsChart from '@/components/PretsChart'
 import { toast } from 'sonner'
 import { STATUTS, piecesByCategorie, pretCouleur, type Dossier } from '@/data/mock'
 import { useStore, getO365EmailFor } from '@/stores/useStore'
@@ -828,9 +827,6 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
   // Agrégats
   const totalEmprunte = prets.reduce((s, p) => s + (p.montant ?? 0), 0)
   const mensualiteTotale = pretsWithMens.reduce((s, p) => s + p._eff.totale, 0)
-  const fraisGarantie = prets.reduce((s, p) => s + (p.garantieMontant ?? 0), 0)
-  const fraisDossierTotal = prets.reduce((s, p) => s + (p.fraisDossier ?? 0), 0)
-  const commissionTotale = prets.reduce((s, p) => s + (p.commission ?? 0), 0)
   const dureeMaxMois = prets.reduce((m, p) => Math.max(m, p.dureeMois), 0)
   // Coût total approximatif : somme(mensualités * durée) - capital total
   const coutTotalCredit = pretsWithMens.reduce((s, p) => {
@@ -999,34 +995,6 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
           </div>
         )}
       </Section>
-
-      {prets.length > 0 && (
-        <>
-          <div className="grid grid-cols-2 gap-4">
-            <Section title="Évolution du capital restant dû">
-              <PretsChart prets={prets} mode="krd" height={340} />
-              <div className="text-[11px] text-navy-400 mt-2">
-                Dette résiduelle dans le temps — diminue à mesure que le capital est remboursé.
-              </div>
-            </Section>
-            <Section title="Tableau d'amortissement (capital / intérêts)">
-              <PretsChart prets={prets} mode="amortissement" height={340} />
-              <div className="text-[11px] text-navy-400 mt-2">
-                Décomposition de chaque échéance — part intérêts (gold) en bas, part capital (navy) au-dessus. Les intérêts dominent au début, le capital prend le dessus en fin de prêt.
-              </div>
-            </Section>
-          </div>
-
-          <Section title="Frais & commission">
-            <div className="grid grid-cols-4 gap-5">
-              <Field label="Frais dossier (cumul)" value={eur(fraisDossierTotal)} />
-              <Field label="Frais garanties" value={eur(fraisGarantie)} />
-              <Field label="Commission courtier" value={eur(commissionTotale)} />
-              <Field label="Total frais" value={eur(fraisDossierTotal + fraisGarantie)} />
-            </div>
-          </Section>
-        </>
-      )}
 
       <PretEditor
         open={editorOpen}

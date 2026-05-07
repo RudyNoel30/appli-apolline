@@ -162,13 +162,13 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
         </header>
 
         {/* Contenu : 2 colonnes (gauche = plan + graph, droite = KPIs) */}
-        <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden p-4">
+        <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden p-4 min-h-0">
           {/* Colonne principale (2/3) */}
-          <div className="col-span-2 flex flex-col gap-3 overflow-hidden">
-            {/* Tableau des prêts */}
-            <div className="card p-4 shrink-0">
+          <div className="col-span-2 flex flex-col gap-3 overflow-hidden min-h-0">
+            {/* Tableau des prêts — compact + scrollable si > 4 lignes */}
+            <div className="card p-3 shrink-0">
               <div className="text-xs uppercase tracking-wider text-navy-500 font-semibold mb-2">Contenu du plan ({prets.length} prêt{prets.length > 1 ? 's' : ''})</div>
-              <div className="rounded-lg border border-navy-100 overflow-hidden">
+              <div className="rounded-lg border border-navy-100 overflow-hidden max-h-[180px] overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-navy-50 text-[11px] uppercase tracking-wider text-navy-600">
@@ -236,7 +236,7 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
             </div>
 
             {/* Vue graphique / Mensualités / Amortissement (onglets) */}
-            <div className="card p-0 flex-1 flex flex-col overflow-hidden">
+            <div className="card p-0 flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="border-b border-navy-100 bg-ivory/50 px-4 shrink-0">
                 <div className="flex gap-1 -mb-px">
                   <TabButton active={view === 'graphique'} onClick={() => setView('graphique')}>Vue graphique</TabButton>
@@ -244,32 +244,33 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
                   <TabButton active={view === 'amortissement'} onClick={() => setView('amortissement')}>Amortissement</TabButton>
                 </div>
               </div>
-              <div className="flex-1 p-4 overflow-auto">
+              {/* Le chart prend 100% de la hauteur dispo, plus de scrollbar interne */}
+              <div className="flex-1 p-3 min-h-0">
                 {view === 'graphique' && (
-                  <PretsChart prets={prets} mode="mensualites_stacked" height={400} />
+                  <PretsChart prets={prets} mode="mensualites_stacked" height="100%" />
                 )}
                 {view === 'mensualites' && (
-                  <PretsChart prets={prets} mode="mensualites" height={400} />
+                  <PretsChart prets={prets} mode="mensualites" height="100%" />
                 )}
                 {view === 'amortissement' && (
-                  <PretsChart prets={prets} mode="amortissement" height={400} />
+                  <PretsChart prets={prets} mode="amortissement" height="100%" />
                 )}
               </div>
             </div>
           </div>
 
-          {/* Colonne KPIs (1/3) */}
-          <div className="col-span-1 flex flex-col gap-3 overflow-y-auto">
-            <KpiBlock title="Détail du projet">
+          {/* Colonne KPIs (1/3) — compacte, scrollable si très long */}
+          <div className="col-span-1 flex flex-col gap-2 overflow-y-auto min-h-0 text-sm">
+            <KpiBlock title="Détail du projet" compact>
               <KpiRow label="Projet hors FN" value={eur(projetHFN)} />
               <KpiRow label="Frais de notaire" value={eur(fraisNotaire)} />
               <KpiRow label="Frais de garantie" value={eur(fraisGarantie)} />
               <KpiRow label="Frais de dossier" value={eur(fraisDossier)} />
-              <KpiRow label="Subvention(s)" value={eur(subventions)} muted />
-              <hr className="border-navy-100 my-2" />
-              <KpiRow label="Apport numéraire" value={eur(apport)} accent="navy" />
-              <KpiRow label="Total des prêts" value={eur(totalEmprunte)} accent="navy" />
-              <hr className="border-navy-100 my-2" />
+              {subventions > 0 && <KpiRow label="Subvention(s)" value={eur(subventions)} muted />}
+              <hr className="border-navy-100 my-1" />
+              <KpiRow label="Apport" value={eur(apport)} accent="navy" />
+              <KpiRow label="Total prêts" value={eur(totalEmprunte)} accent="navy" />
+              <hr className="border-navy-100 my-1" />
               <KpiRow
                 label="Reste à financer"
                 value={eur(resteAFinancer)}
@@ -278,24 +279,24 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
               />
             </KpiBlock>
 
-            <KpiBlock title="Indicateurs du plan">
-              <KpiRow label="Coût du crédit" value={eur(Math.round(coutCredit))} />
-              <KpiRow label="TAEG du plan" value={pct(taegPlan)} accent="gold" bold />
+            <KpiBlock title="Indicateurs du plan" compact>
+              <KpiRow label="Coût crédit" value={eur(Math.round(coutCredit))} />
+              <KpiRow label="TAEG plan" value={pct(taegPlan)} accent="gold" bold />
               <KpiRow label="Taux PPal+autre" value={pct(tauxPpalAutre)} muted />
-              <KpiRow label="Mensualité totale" value={eur(Math.round(mensCourante))} accent="gold" bold />
+              <KpiRow label="Mens. totale" value={eur(Math.round(mensCourante))} accent="gold" bold />
             </KpiBlock>
 
             {!lisseur && prets.length >= 2 && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
-                <strong>⚠️ Aucun prêt lisseur identifié.</strong> Ajoutez un prêt amortissable de longue durée ou marquez un prêt existant comme « profil paliers_lissage » pour activer l'optimisation.
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-[11px] text-amber-900">
+                <strong>⚠️ Aucun lisseur.</strong> Ajoutez un prêt amortissable long ou marquez un prêt en « profil paliers_lissage ».
               </div>
             )}
             {lisseur && (
-              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900">
-                <strong>Prêt lisseur :</strong> {lisseur.libelle ?? PRET_TYPE_LABEL[lisseur.type]} ({lisseur.dureeMois} mois)
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-[11px] text-emerald-900">
+                <strong>Lisseur :</strong> {lisseur.libelle ?? PRET_TYPE_LABEL[lisseur.type]}
                 {lisseur.paliers && lisseur.paliers.length > 0
-                  ? ` · ${lisseur.paliers.length} palier(s) configuré(s)`
-                  : ' · Pas encore optimisé'}
+                  ? ` · ${lisseur.paliers.length} palier(s) ✓`
+                  : ' · Non optimisé'}
               </div>
             )}
           </div>
@@ -336,11 +337,11 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   )
 }
 
-function KpiBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function KpiBlock({ title, children, compact }: { title: string; children: React.ReactNode; compact?: boolean }) {
   return (
-    <div className="card p-4">
-      <div className="text-xs uppercase tracking-wider text-navy-500 font-semibold mb-2">{title}</div>
-      <div className="space-y-1">{children}</div>
+    <div className={cn('card', compact ? 'p-2.5' : 'p-4')}>
+      <div className={cn('text-[10px] uppercase tracking-wider text-navy-500 font-semibold', compact ? 'mb-1.5' : 'mb-2')}>{title}</div>
+      <div className={compact ? 'space-y-0.5' : 'space-y-1'}>{children}</div>
     </div>
   )
 }
@@ -359,10 +360,10 @@ function KpiRow({ label, value, accent, bold, muted }: {
     rose: 'text-rose-700',
   }
   return (
-    <div className="flex items-baseline justify-between text-sm">
+    <div className="flex items-baseline justify-between text-xs">
       <span className={cn('text-navy-600', muted && 'text-navy-400')}>{label}</span>
       <span className={cn(
-        'font-mono tabular-nums',
+        'font-mono tabular-nums text-[13px]',
         accent ? colorMap[accent] : 'text-navy-900',
         bold && 'font-bold',
         muted && 'text-navy-400',
