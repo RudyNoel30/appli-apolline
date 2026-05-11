@@ -49,7 +49,11 @@ export default function Modal({ open, onClose, title, description, children, act
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'relative w-full max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden',
+          // max-h-[calc(...)] : en Tailwind arbitrary values, le `-` à
+          // l'intérieur de calc() doit être entouré d'underscores qui sont
+          // convertis en espaces, sinon Tailwind sort `calc(100vh-3rem)`
+          // qui est invalide en CSS → ignoré → modale sans max-h.
+          'relative w-full max-h-[calc(100vh_-_3rem)] flex flex-col overflow-hidden',
           'bg-white rounded-xl2 shadow-raised animate-scale-in',
           widths[size],
         )}
