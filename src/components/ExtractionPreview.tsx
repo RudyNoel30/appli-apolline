@@ -14,11 +14,11 @@
  * Types supportés Phase 1 : bulletin_salaire, avis_imposition.
  * Phase 2 (à venir) : rib, cni, justif_domicile.
  */
-import { useMemo, useState } from 'react'
-import { Sparkles, CheckCircle2, AlertCircle, XCircle, ArrowRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Sparkles, CheckCircle2, AlertCircle, XCircle, ArrowRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import FullScreenSheet from './FullScreenSheet'
-import { pieces, type ExtractionType, type PieceMeta } from '@/db/api'
+import { pieces, getToken, type ExtractionType, type PieceMeta } from '@/db/api'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -160,7 +160,42 @@ export default function ExtractionPreview({ open, onClose, piece, onApplied }: P
   const [selected, setSelected] = useState<Record<string, boolean>>(initial.selected)
   const [applying, setApplying] = useState(false)
 
-  const previewUrl = pieces.previewUrl(piece.id)
+  // Preview via blob URL (fetch authentifié → URL.createObjectURL → iframe local)
+  // → contourne le X-Frame-Options DENY que Caddy met sur les réponses backend.
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [blobLoading, setBlobLoading] = useState(false)
+  const [blobError, setBlobError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    let urlToCleanup: string | null = null
+    const load = async () => {
+      setBlobLoading(true); setBlobError(null); setBlobUrl(null)
+      try {
+        const token = getToken()
+        const base = (import.meta.env.VITE_API_BASE as string | undefined) || 'https://appli.apolline.groupe-apolline.eu'
+        const res = await fetch(`${base}/api/pieces/${encodeURIComponent(piece.id)}/preview`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const blob = await res.blob()
+        if (cancelled) return
+        const url = URL.createObjectURL(blob)
+        urlToCleanup = url
+        setBlobUrl(url)
+      } catch (e) {
+        if (!cancelled) setBlobError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setBlobLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+      if (urlToCleanup) URL.revokeObjectURL(urlToCleanup)
+    }
+  }, [open, piece.id])
 
   const onApply = async () => {
     setApplying(true)
@@ -242,20 +277,39 @@ export default function ExtractionPreview({ open, onClose, piece, onApplied }: P
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ─── Preview du document ─────────────────────────────────────── */}
-        <div className="card p-2 h-[70vh] sticky top-0">
-          {piece.mimeType.startsWith('image/') ? (
-            <img
-              src={previewUrl}
-              alt={piece.filename}
-              className="w-full h-full object-contain bg-navy-50/30 rounded"
-            />
-          ) : (
-            <iframe
-              src={previewUrl}
-              title={piece.filename}
-              className="w-full h-full rounded bg-navy-50/30"
-            />
+        {/* ─── Preview du document (via blob URL pour contourner X-Frame-Options) ─── */}
+        <div className="card p-2 h-[70vh] sticky top-0 bg-navy-50/30">
+          {blobLoading && (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto text-gold-600 mb-2" />
+                <div className="text-sm text-navy-500">Chargement de l'aperçu…</div>
+              </div>
+            </div>
+          )}
+          {blobError && !blobLoading && (
+            <div className="h-full flex items-center justify-center text-center px-6">
+              <div>
+                <AlertCircle className="h-8 w-8 text-rose-500 mx-auto mb-2" />
+                <div className="text-sm font-semibold text-navy-700">Aperçu indisponible</div>
+                <div className="text-xs text-navy-500 mt-1">{blobError}</div>
+              </div>
+            </div>
+          )}
+          {blobUrl && !blobLoading && !blobError && (
+            piece.mimeType.startsWith('image/') ? (
+              <img
+                src={blobUrl}
+                alt={piece.filename}
+                className="w-full h-full object-contain rounded"
+              />
+            ) : (
+              <iframe
+                src={blobUrl}
+                title={piece.filename}
+                className="w-full h-full rounded border-0 bg-white"
+              />
+            )
           )}
         </div>
 
