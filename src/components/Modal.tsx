@@ -31,26 +31,26 @@ export default function Modal({ open, onClose, title, description, children, act
 
   return (
     <div
-      className="fixed inset-0 z-50 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-fade-in"
       onClick={onClose}
     >
       {/* Backdrop plein écran, derrière la modale */}
       <div className="absolute inset-0 bg-navy-950/60 backdrop-blur-sm" />
 
       {/*
-        Positionnement EXPLICITE par top/bottom au lieu d'un flex centré +
-        max-h-[90vh]. C'est BEAUCOUP plus robuste dans WebView2 / Tauri où
-        le calcul des max-h en vh peut être pris en défaut par certains
-        zooms et chromes système. Avec top:24px / bottom:24px on garantit
-        que la modale tient TOUJOURS dans la viewport, et son footer en
-        bas est physiquement à 24 px du bord de l'écran.
+        Centrage par flexbox du parent (items-center justify-center) →
+        AUCUN transform sur la modale elle-même (l'animation animate-scale-in
+        utilise transform:scale et écraserait un translate-x).
+
+        On découple le wrapper de positionnement (relative, max-h, flex-col)
+        de la couche d'animation (un enfant intérieur). Comme ça scale-in
+        ne touche jamais le positionnement.
       */}
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'absolute left-1/2 -translate-x-1/2 top-6 bottom-6',
-          'bg-white rounded-xl2 shadow-raised flex flex-col animate-scale-in overflow-hidden',
-          'w-[calc(100%-3rem)]', // largeur = 100% - 24px à gauche - 24px à droite
+          'relative w-full max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden',
+          'bg-white rounded-xl2 shadow-raised animate-scale-in',
           widths[size],
         )}
       >
