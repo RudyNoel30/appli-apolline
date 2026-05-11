@@ -31,18 +31,26 @@ export default function Modal({ open, onClose, title, description, children, act
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-fade-in"
+      className="fixed inset-0 z-50 animate-fade-in"
       onClick={onClose}
     >
+      {/* Backdrop plein écran, derrière la modale */}
       <div className="absolute inset-0 bg-navy-950/60 backdrop-blur-sm" />
+
+      {/*
+        Positionnement EXPLICITE par top/bottom au lieu d'un flex centré +
+        max-h-[90vh]. C'est BEAUCOUP plus robuste dans WebView2 / Tauri où
+        le calcul des max-h en vh peut être pris en défaut par certains
+        zooms et chromes système. Avec top:24px / bottom:24px on garantit
+        que la modale tient TOUJOURS dans la viewport, et son footer en
+        bas est physiquement à 24 px du bord de l'écran.
+      */}
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          // h-[90vh] + max-h impose une hauteur stable ; flex-col + min-h-0
-          // permet à la zone scrollable de bien se rétracter et le footer
-          // d'être toujours visible. On force aussi overflow-hidden au
-          // container pour que rien ne dépasse les rounded corners.
-          'relative bg-white rounded-xl2 shadow-raised w-full max-h-[90vh] flex flex-col animate-scale-in overflow-hidden',
+          'absolute left-1/2 -translate-x-1/2 top-6 bottom-6',
+          'bg-white rounded-xl2 shadow-raised flex flex-col animate-scale-in overflow-hidden',
+          'w-[calc(100%-3rem)]', // largeur = 100% - 24px à gauche - 24px à droite
           widths[size],
         )}
       >
