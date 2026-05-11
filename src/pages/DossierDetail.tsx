@@ -369,7 +369,9 @@ export default function DossierDetail() {
             </div>
           </div>
 
-          <div className="p-6">
+          {/* key={tab} sur le wrapper → React remonte le contenu à chaque
+              changement d'onglet, ce qui rejoue l'animation tab-content. */}
+          <div key={tab} className="p-6 tab-content">
             {tab === 'etatcivil' && <TabEtatCivil client={client} />}
             {tab === 'revenus' && <TabRevenus client={client} />}
             {tab === 'patrimoine' && <TabPatrimoine dossier={dossier} client={client} onEdit={() => setEditModal(true)} />}

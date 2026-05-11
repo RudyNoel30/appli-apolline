@@ -418,7 +418,7 @@ export default function Pieces() {
                     <th className="table-th" colSpan={2}>Fichier(s) détecté(s)</th>
                   </tr>
                 </thead>
-                <tbody className="list-fast">
+                <tbody className="list-fast stagger-fast">
                   {filtered.map((p, i) => (
                     <tr key={i} className="hover:bg-navy-50/60 transition-colors duration-150 align-top">
                       <td className="table-td">

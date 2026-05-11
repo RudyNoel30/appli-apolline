@@ -246,7 +246,7 @@ function ListView() {
             <th className="table-th">Créé</th>
           </tr>
         </thead>
-        <tbody className="list-fast">
+        <tbody className="list-fast stagger-fast">
           {dossiers.map((d) => {
             const stat = STATUTS.find((s) => s.key === d.statut)!
             return (

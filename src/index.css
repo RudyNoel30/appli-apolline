@@ -140,7 +140,7 @@
 }
 
 @layer utilities {
-  /* Délais en cascade pour animer des listes */
+  /* ─── Stagger : délais en cascade pour animer des listes ─── */
   .stagger-1 { animation-delay: 40ms; }
   .stagger-2 { animation-delay: 80ms; }
   .stagger-3 { animation-delay: 120ms; }
@@ -149,6 +149,37 @@
   .stagger-6 { animation-delay: 240ms; }
   .stagger-7 { animation-delay: 280ms; }
   .stagger-8 { animation-delay: 320ms; }
+
+  /* Stagger automatique sur enfants directs — applique fade-in-up + délai
+     proportionnel au rang, jusqu'au 12e enfant. Au-delà, délai max stable. */
+  .stagger-auto > * {
+    animation: fade-in-up 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger-auto > *:nth-child(1)  { animation-delay: 30ms; }
+  .stagger-auto > *:nth-child(2)  { animation-delay: 60ms; }
+  .stagger-auto > *:nth-child(3)  { animation-delay: 90ms; }
+  .stagger-auto > *:nth-child(4)  { animation-delay: 120ms; }
+  .stagger-auto > *:nth-child(5)  { animation-delay: 150ms; }
+  .stagger-auto > *:nth-child(6)  { animation-delay: 180ms; }
+  .stagger-auto > *:nth-child(7)  { animation-delay: 210ms; }
+  .stagger-auto > *:nth-child(8)  { animation-delay: 240ms; }
+  .stagger-auto > *:nth-child(9)  { animation-delay: 270ms; }
+  .stagger-auto > *:nth-child(10) { animation-delay: 300ms; }
+  .stagger-auto > *:nth-child(11) { animation-delay: 330ms; }
+  .stagger-auto > *:nth-child(12) { animation-delay: 360ms; }
+  .stagger-auto > *:nth-child(n+13) { animation-delay: 380ms; }
+
+  /* Variante rapide pour grandes listes (ne pas saturer l'œil) */
+  .stagger-fast > * {
+    animation: fade-in-up 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger-fast > *:nth-child(1)  { animation-delay: 0ms; }
+  .stagger-fast > *:nth-child(2)  { animation-delay: 20ms; }
+  .stagger-fast > *:nth-child(3)  { animation-delay: 40ms; }
+  .stagger-fast > *:nth-child(4)  { animation-delay: 60ms; }
+  .stagger-fast > *:nth-child(5)  { animation-delay: 80ms; }
+  .stagger-fast > *:nth-child(6)  { animation-delay: 100ms; }
+  .stagger-fast > *:nth-child(n+7) { animation-delay: 120ms; }
 
   /* Effet press sur bouton */
   .press { @apply active:scale-[0.97] transition-transform duration-75; }
@@ -372,3 +403,152 @@ html.theme-sombre ::-webkit-scrollbar-thumb { background: #334155; border-color:
   border: 2px solid #F8F7F3;
 }
 ::-webkit-scrollbar-thumb:hover { background: #8498BC; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Animations utilitaires premium — palette unifiée
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Tabs : transition douce du contenu quand on change d'onglet ─── */
+.tab-content {
+  animation: tab-content-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes tab-content-enter {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Indicateur d'onglet actif qui glisse (pour tabs avec underline) ─── */
+.tab-indicator {
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─── Skeleton loaders : shimmer doux pour blocs en cours de chargement ─── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(190, 201, 223, 0.18) 0%,
+    rgba(190, 201, 223, 0.32) 50%,
+    rgba(190, 201, 223, 0.18) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 6px;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── Success flash : pulse vert subtil après une sauvegarde ─── */
+.success-flash {
+  animation: success-flash 1.2s ease-out both;
+}
+@keyframes success-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  20%  { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.4); }
+  100% { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
+}
+
+/* ─── Error shake : secousse horizontale subtile pour signaler erreur ─── */
+.error-shake {
+  animation: error-shake 360ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+@keyframes error-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+
+/* ─── Row hover : lift très subtil avec ombre + bordure gold ─── */
+.row-hover {
+  transition: background-color 150ms ease, box-shadow 200ms ease, transform 150ms ease;
+}
+.row-hover:hover {
+  background-color: rgba(243, 245, 250, 0.6);
+  box-shadow: inset 3px 0 0 0 rgba(201, 169, 97, 0.6);
+}
+
+/* ─── Empty state : icône qui flotte doucement ─── */
+.float-soft {
+  animation: float-soft 4s ease-in-out infinite;
+}
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* ─── Number ticker : utilisé sur kpi-value qui se met à jour ─── */
+.number-tick {
+  animation: number-tick 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes number-tick {
+  0%   { opacity: 0; transform: translateY(-8px); filter: blur(2px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* ─── Caret : curseur flèche qui s'élargit en hover (CTAs) ─── */
+.caret-grow {
+  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.group:hover .caret-grow,
+*:hover > .caret-grow {
+  transform: translateX(4px);
+}
+
+/* ─── Toggle : transition smooth pour switches/checkboxes ─── */
+.toggle-smooth {
+  transition: background-color 200ms cubic-bezier(0.22, 1, 0.36, 1), border-color 200ms ease;
+}
+.toggle-smooth > * {
+  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─── Drawer / Sheet : slide depuis la droite (full height) ─── */
+.drawer-enter {
+  animation: drawer-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes drawer-enter {
+  0%   { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+
+/* ─── Toast (sonner) : surcouche pour matcher la charte ─── */
+[data-sonner-toaster] [data-sonner-toast] {
+  animation: toast-enter 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes toast-enter {
+  0%   { opacity: 0; transform: translateX(20px) scale(0.96); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Respect `prefers-reduced-motion` — accessibilité
+   Désactive toutes les animations longues/décoratives pour les utilisateurs
+   qui ont activé ce réglage système. Garde uniquement les feedbacks essentiels
+   (focus ring, hover background) à 0.01ms pour ne pas péter la lecture.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* On garde les états interactifs visibles malgré tout (focus, hover) */
+  *:focus-visible {
+    outline-width: 2px;
+    outline-offset: 2px;
+  }
+  /* Désactive les fonds animés (shimmer, gradient mouvant) */
+  .shimmer-gold,
+  .polette-pulse,
+  .polette-scan::after,
+  .skeleton,
+  .float-soft,
+  .polette-dots span {
+    animation: none !important;
+  }
+}

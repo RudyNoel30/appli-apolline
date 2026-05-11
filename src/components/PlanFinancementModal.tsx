@@ -325,11 +325,11 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
                   refuse de rendre quand height='100%' dans certains contextes flex */}
               <ChartSlot>
                 {(h) => (
-                  <>
+                  <div key={view} className="tab-content h-full">
                     {view === 'graphique' && <PretsChart prets={prets} mode="mensualites_stacked" height={h} />}
                     {view === 'mensualites' && <PretsChart prets={prets} mode="mensualites" height={h} />}
                     {view === 'amortissement' && <PretsChart prets={prets} mode="amortissement" height={h} />}
-                  </>
+                  </div>
                 )}
               </ChartSlot>
             </div>

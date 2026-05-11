@@ -224,8 +224,9 @@ export default function Facturation() {
             </button>
           </div>
 
-          {/* Tableau */}
-          <div className="overflow-x-auto">
+          {/* Tableau — key={tab} pour rejouer le stagger d'entrée à chaque
+              changement d'onglet (factures / ristournes / avoirs) */}
+          <div key={tab} className="overflow-x-auto tab-content">
             <table className="w-full text-sm">
               <thead>
                 <tr>
@@ -240,7 +241,7 @@ export default function Facturation() {
                   <th className="table-th text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="list-fast">
+              <tbody className="list-fast stagger-fast">
                 {list.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-12 text-center text-sm text-navy-400 italic">

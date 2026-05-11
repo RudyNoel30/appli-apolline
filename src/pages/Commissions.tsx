@@ -146,7 +146,7 @@ export default function Commissions() {
               <th className="table-th text-center">Statut</th>
             </tr>
           </thead>
-          <tbody className="list-fast">
+          <tbody className="list-fast stagger-fast">
             {commissions.map((c) => (
               <tr key={c.dossierId} className="hover:bg-navy-50/60 transition-colors duration-150">
                 <td className="table-td">

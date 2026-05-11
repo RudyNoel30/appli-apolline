@@ -165,7 +165,7 @@ export default function Clients({ mode = 'client' }: { mode?: Mode }) {
                 <th className="table-th w-28"></th>
               </tr>
             </thead>
-            <tbody className="list-fast">
+            <tbody className="list-fast stagger-fast">
               {list.map((c) => {
                 const dossierTargetId = dossierEnCours(c.id)
                 return (
