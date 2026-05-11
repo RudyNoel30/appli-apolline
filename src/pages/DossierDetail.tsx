@@ -20,7 +20,7 @@ import TabPiecesLocal from '@/components/TabPiecesLocal'
 import OneDriveFolderPicker, { type OneDriveSelection } from '@/components/OneDriveFolderPicker'
 import PretEditor from '@/components/PretEditor'
 import { toast } from 'sonner'
-import { STATUTS, piecesByCategorie, pretCouleur, type Dossier } from '@/data/mock'
+import { STATUTS, piecesByCategorie, piecesAttendues, pretCouleur, type Dossier } from '@/data/mock'
 import { useStore, getO365EmailFor } from '@/stores/useStore'
 import { useAuth, usePermissions } from '@/auth/AuthContext'
 import { eur, pct, dateFr, dateTimeFr, cn, initials } from '@/lib/utils'
@@ -92,6 +92,57 @@ export default function DossierDetail() {
   const dossierPrets = allPrets.filter((p) => p.dossierId === (dossier?.id ?? ''))
   const { currentUser } = useAuth()
   const { can } = usePermissions()
+
+  // ─── Calculs live LTV / HCSF / Score (NE PAS utiliser les valeurs stockées
+  // qui sont des snapshots à la création — elles ne suivent pas l'ajout
+  // de prêts ou de pièces dans le détail).
+  const [livePiecesCount, setLivePiecesCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!dossier?.id) return
+    let cancelled = false
+    void piecesApi.list(dossier.id)
+      .then((rows) => { if (!cancelled) setLivePiecesCount(rows.length) })
+      .catch(() => { /* silencieux — fallback sur dossier.piecesFournies */ })
+    // Réagit aux events d'upload/delete émis par TabPiecesLocal
+    const onChange = () => {
+      void piecesApi.list(dossier.id).then((rows) => {
+        if (!cancelled) setLivePiecesCount(rows.length)
+      }).catch(() => { /* swallow */ })
+    }
+    window.addEventListener('apolline:pieces-changed', onChange)
+    return () => {
+      cancelled = true
+      window.removeEventListener('apolline:pieces-changed', onChange)
+    }
+  }, [dossier?.id])
+
+  // Toutes les valeurs LIVE dérivent de dossierPrets + dossier (revenus) + pieces
+  const liveTotalEmprunte = dossierPrets.reduce((s, p) => s + (p.montant ?? 0), 0)
+  const liveMensualiteTotale = dossierPrets.reduce((s, p) => s + effectiveMensualite(p).totale, 0)
+  const liveDureeMaxMois = dossierPrets.reduce((m, p) => Math.max(m, p.dureeMois ?? 0), 0)
+  const liveLtv = (dossier?.montantBien ?? 0) > 0
+    ? liveTotalEmprunte / (dossier?.montantBien ?? 1)
+    : 0
+
+  // Revenus mensuels nets du foyer (rfMenage est annuel)
+  const liveRevenusMensuels = ((dossier?.rfMenage ?? 0) / 12)
+    + (dossier?.allocFamiliales ?? 0)
+    + (dossier?.aplAlActuelle ?? 0)
+  const liveRatioEndettement = liveRevenusMensuels > 0
+    ? liveMensualiteTotale / liveRevenusMensuels
+    : 0
+
+  // HCSF en temps réel : taux endettement ≤ 35 %, durée ≤ 25 ans (300 mois), LTV ≤ 100 %
+  const liveHcsfOk = liveRatioEndettement > 0
+    && liveRatioEndettement <= 0.35
+    && liveDureeMaxMois <= 300
+    && liveLtv <= 1.0
+
+  // Pièces attendues : on compte les pièces NON optionnelles dans la convention
+  const livePiecesTotal = useMemo(
+    () => piecesAttendues.filter((p) => !p.optionnelle).length,
+    [],
+  )
 
   if (!dossier || !client) {
     return (
@@ -301,19 +352,31 @@ export default function DossierDetail() {
                 <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">LTV</div>
                 <div className={cn(
                   'font-serif text-xl font-semibold',
-                  dossier.ltv > 0.9 ? 'text-amber-700' : 'text-navy-900',
-                )}>{pct(dossier.ltv, 0)}</div>
+                  liveLtv > 0.9 ? 'text-amber-700' : liveLtv === 0 ? 'text-navy-300' : 'text-navy-900',
+                )}
+                title={`Total emprunté ${eur(liveTotalEmprunte)} / Valeur bien ${eur(dossier.montantBien ?? 0)}`}>
+                  {liveLtv > 0 ? pct(liveLtv, 0) : '—'}
+                </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Score</div>
                 {(() => {
-                  const score = computeScoreConfiance(dossier)
+                  const score = computeScoreConfiance(dossier, {
+                    ltv: liveLtv,
+                    piecesFournies: livePiecesCount ?? undefined,
+                    piecesTotal: livePiecesTotal,
+                    hcsfOk: liveHcsfOk,
+                    ratioMensualiteRevenus: liveRatioEndettement > 0 ? liveRatioEndettement : undefined,
+                  })
                   return (
                     <div className={cn(
                       'font-serif text-xl font-semibold',
                       score >= 85 ? 'text-emerald-700' :
                       score >= 70 ? 'text-gold-700' : 'text-rose-700',
-                    )}>{score}/100</div>
+                    )}
+                    title={`LTV ${pct(liveLtv, 0)} · HCSF ${liveHcsfOk ? '✓' : '✗'} · Endettement ${pct(liveRatioEndettement, 0)} · Pièces ${livePiecesCount ?? '?'} / ${livePiecesTotal}`}>
+                      {score}/100
+                    </div>
                   )
                 })()}
               </div>
