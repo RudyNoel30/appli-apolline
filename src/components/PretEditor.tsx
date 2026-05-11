@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Trash2, Save, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import Modal from './Modal'
+import FullScreenSheet from './FullScreenSheet'
 import {
   type Pret, type PretType, type PretStatut, type GarantieType, type PretProfilAmortissement,
   PRET_TYPE_LABEL, PRET_STATUT_LABEL, GARANTIE_LABEL, PRET_PROFIL_LABEL,
@@ -253,12 +253,11 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
   }
 
   return (
-    <Modal
+    <FullScreenSheet
       open={open}
       onClose={onClose}
       title={isEdit ? 'Modifier le prêt' : 'Nouveau prêt'}
       description={isEdit ? 'Édition d\'une composante du plan de financement' : 'Ajouter une composante au plan de financement'}
-      size="lg"
       actions={
         <>
           {isEdit && onDelete && (
@@ -273,7 +272,7 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
         </>
       }
     >
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-4 max-w-5xl mx-auto">
         <div>
           <label className="label">Libellé</label>
           <input
@@ -557,7 +556,7 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
 
         <button type="submit" className="hidden" />
       </form>
-    </Modal>
+    </FullScreenSheet>
   )
 }
 
