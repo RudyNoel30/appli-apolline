@@ -8,9 +8,11 @@ import {
 } from 'lucide-react'
 import FactureFormModal from '@/components/FactureFormModal'
 import StatusBadge from '@/components/StatusBadge'
-import { factures as facturesApi, type Facture, pieces as piecesApi } from '@/db/api'
+import { factures as facturesApi, type Facture, pieces as piecesApi, auditDossier as auditDossierApi, type AuditDossierResult } from '@/db/api'
+import AuditDossierModal from '@/components/AuditDossierModal'
 import { effectiveMensualite, calcTAEG, calcTAEA } from '@/lib/finance'
 import PlanFinancementModal from '@/components/PlanFinancementModal'
+import OffresComparateur from '@/components/OffresComparateur'
 import Modal from '@/components/Modal'
 import AiPreviewModal from '@/components/AiPreviewModal'
 import DossierEditor from '@/components/DossierEditor'
@@ -70,6 +72,11 @@ export default function DossierDetail() {
 
   const [tab, setTab] = useState<Tab>('etatcivil')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Audit IA
+  const [auditOpen, setAuditOpen] = useState(false)
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditResult, setAuditResult] = useState<AuditDossierResult | null>(null)
+  const [auditCost, setAuditCost] = useState<number | undefined>(undefined)
   const [editModal, setEditModal] = useState(false)
   const [aiModal, setAiModal] = useState<{ title: string } | null>(null)
   const [aiResult, setAiResult] = useState<AiGenerateResult | null>(null)
@@ -107,6 +114,29 @@ export default function DossierDetail() {
   }
 
   const stat = STATUTS.find((s) => s.key === dossier.statut)!
+
+  /** Audit IA du dossier : analyse Claude des forces / faiblesses / HCSF / banques. */
+  const runAudit = async () => {
+    setAuditOpen(true)
+    setAuditLoading(true)
+    setAuditResult(null)
+    setAuditCost(undefined)
+    try {
+      const res = await auditDossierApi.run(dossier.id)
+      setAuditResult(res.data)
+      setAuditCost(res.usage.estimatedCostEur)
+      toast.success('Audit terminé', {
+        description: `${res.data.synthese.score_global_pct}/100 · ${res.data.synthese.phrase_synthese}`,
+        duration: 6000,
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error('Échec audit IA', { description: msg.slice(0, 200) })
+      setAuditOpen(false)
+    } finally {
+      setAuditLoading(false)
+    }
+  }
 
   /** Génération IA via Claude API en utilisant un skill Apolline. */
   const generateAi = async (skillName: string, title: string) => {
@@ -296,7 +326,10 @@ export default function DossierDetail() {
               <span className="kicker pr-1 select-none">
                 Génération IA
               </span>
-              <button className="btn-gold" onClick={() => generateAi('ddp-pdf', 'DDP — Demande de Prêt')}>
+              <button className="btn-gold" onClick={() => void runAudit()} title="Audit IA du dossier — analyse points forts/faibles, HCSF, banques recommandées">
+                <Sparkles className="h-4 w-4" /> Auditer ce dossier
+              </button>
+              <button className="btn-outline" onClick={() => generateAi('ddp-pdf', 'DDP — Demande de Prêt')}>
                 <Sparkles className="h-4 w-4" /> Générer DDP
               </button>
               <button className="btn-outline" onClick={() => generateAi('dossier-html', 'Dossier banquier HTML')}>
@@ -434,6 +467,16 @@ export default function DossierDetail() {
           </div>
         </div>
       )}
+
+      {/* Audit IA — modale plein écran, dispo depuis n'importe quel onglet */}
+      <AuditDossierModal
+        open={auditOpen}
+        onClose={() => setAuditOpen(false)}
+        audit={auditResult}
+        loading={auditLoading}
+        dossierRef={dossier.ref}
+        estimatedCostEur={auditCost}
+      />
     </>
   )
 }
@@ -997,6 +1040,13 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
           </div>
         )}
       </Section>
+
+      {/* ─── Comparateur d'offres bancaires (visible si ≥ 2 banques) ─── */}
+      {prets.length >= 2 && (
+        <div className="mt-5">
+          <OffresComparateur prets={prets} />
+        </div>
+      )}
 
       <PretEditor
         open={editorOpen}

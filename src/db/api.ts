@@ -337,6 +337,64 @@ export const pieces = {
   },
 }
 
+/* ────────────────── Audit IA d'un dossier ────────────────── */
+
+export type AuditDossierResult = {
+  points_forts: Array<{ categorie: string; libelle: string; details: string }>
+  points_faibles: Array<{ categorie: string; libelle: string; details: string; gravite: 'haute' | 'moyenne' | 'basse'; mitigation: string }>
+  hcsf: {
+    taux_endettement_pct: number
+    duree_mois: number
+    reste_a_vivre_mensuel: number
+    conforme: boolean
+    derogation_necessaire: boolean
+    motif_derogation: string | null
+    alertes: string[]
+  }
+  coherence: {
+    alertes: Array<{ champ: string; probleme: string; valeur_actuelle: unknown; suggestion: string }>
+    score: number
+  }
+  banques: {
+    recommandees: Array<{ nom: string; score_estime_pct: number; raisons: string[]; argument_cle: string }>
+    a_eviter: Array<{ nom: string; raison: string }>
+  }
+  suggestion_ddp: {
+    titre: string
+    corps: string
+    longueur_chars: number
+  }
+  synthese: {
+    verdict: 'tres_favorable' | 'favorable' | 'mitige' | 'defavorable' | 'tres_defavorable'
+    score_global_pct: number
+    phrase_synthese: string
+  }
+}
+
+export const auditDossier = {
+  /** Lance l'audit IA d'un dossier. Coût ~0.05 €, durée ~10s. */
+  async run(dossierId: string): Promise<{ ok: boolean; data: AuditDossierResult; usage: { inputTokens: number; outputTokens: number; estimatedCostEur: number } }> {
+    return request('POST', `/api/dossiers/${encodeURIComponent(dossierId)}/audit`, {})
+  },
+}
+
+/* ────────────────── Scoring banques (probabilité d'accord) ────────────────── */
+
+export type BanqueScoring = {
+  banque: string
+  envois: number
+  accords: number
+  tauxAccordPct: number
+  derniereActivite: string | null
+}
+
+export const banquesScoring = {
+  /** Retourne les stats d'accord par banque sur les 12 derniers mois. */
+  async list(): Promise<BanqueScoring[]> {
+    return request('GET', '/api/banques/scoring')
+  },
+}
+
 /* ────────────────── AI / Anthropic Claude ────────────────── */
 
 export type AiSkillInfo = { name: string; tier: 'sonnet' | 'haiku' | 'opus'; model: string; title: string; description: string }

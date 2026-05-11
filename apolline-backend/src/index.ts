@@ -21,6 +21,8 @@ import { aiRoute } from './routes/ai.js'
 import { coworkerRoute } from './routes/coworker.js'
 import { facturesRoute } from './routes/factures.js'
 import { conformiteRoute } from './routes/conformite.js'
+import { auditDossierRoute } from './routes/audit-dossier.js'
+import { banquesScoringRoute } from './routes/banques-scoring.js'
 import { sseRoute } from './realtime/sse.js'
 import { startCron } from './realtime/cron.js'
 import { hashPassword } from './middleware/auth.js'
@@ -123,6 +125,8 @@ app.route('/api/ai', aiRoute)
 app.route('/api/coworker', coworkerRoute)
 app.route('/api/factures', facturesRoute)
 app.route('/api/conformite', conformiteRoute)
+app.route('/api', auditDossierRoute)
+app.route('/api/banques', banquesScoringRoute)
 
 // ─── CRUD entités métier ───
 app.route('/api/clients', crudRoute({

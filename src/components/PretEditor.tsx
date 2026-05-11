@@ -10,6 +10,9 @@ import {
 import { calcMensualite, calcMensualiteAssurance, calcTAEG, calcTAEA } from '@/lib/finance'
 import { validatePtz, type PtzValidationInput, type PtzValidation } from '@/lib/ptz'
 import type { Dossier, Client } from '@/data/mock'
+import { banquesScoring, type BanqueScoring } from '@/db/api'
+import { TrendingUp } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type Props = {
   open: boolean
@@ -100,6 +103,28 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
   }
 
   const [f, setF] = useState(buildState)
+
+  // Score d'accord historique par banque (cabinet, 12 derniers mois)
+  const [scoring, setScoring] = useState<Record<string, BanqueScoring>>({})
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void banquesScoring.list()
+      .then((rows) => {
+        if (cancelled) return
+        const map: Record<string, BanqueScoring> = {}
+        for (const r of rows) map[r.banque.toLowerCase()] = r
+        setScoring(map)
+      })
+      .catch(() => { /* silencieux : le badge est juste informatif, pas critique */ })
+    return () => { cancelled = true }
+  }, [open])
+
+  const currentBanqueScoring = useMemo(() => {
+    const name = (f.banque ?? '').trim().toLowerCase()
+    if (!name) return null
+    return scoring[name] ?? null
+  }, [f.banque, scoring])
 
   useEffect(() => {
     if (!open) return
@@ -345,9 +370,13 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
               }}
             >
               <option value="">— Hors liste —</option>
-              {banques.map((b) => (
-                <option key={b.id} value={b.id}>{b.nom}</option>
-              ))}
+              {banques.map((b) => {
+                const sc = scoring[b.nom.toLowerCase()]
+                const suffix = sc ? ` · ${sc.tauxAccordPct}% accord (${sc.envois})` : ''
+                return (
+                  <option key={b.id} value={b.id}>{b.nom}{suffix}</option>
+                )
+              })}
             </select>
           </div>
           <div>
@@ -355,6 +384,23 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
             <input className="input" value={f.banque} onChange={(e) => setF({ ...f, banque: e.target.value })} placeholder="Ex: État (PTZ)" />
           </div>
         </div>
+
+        {/* Score historique de la banque sélectionnée (cabinet, 12 mois) */}
+        {currentBanqueScoring && (
+          <div className={cn(
+            'rounded-lg border p-2.5 text-xs flex items-center gap-2',
+            currentBanqueScoring.tauxAccordPct >= 70 ? 'bg-emerald-50 border-emerald-200 text-emerald-900' :
+            currentBanqueScoring.tauxAccordPct >= 40 ? 'bg-gold-50 border-gold-200 text-gold-900' :
+            'bg-rose-50 border-rose-200 text-rose-900',
+          )}>
+            <TrendingUp className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>Historique cabinet 12 mois :</strong>{' '}
+              {currentBanqueScoring.accords} accord{currentBanqueScoring.accords > 1 ? 's' : ''} sur {currentBanqueScoring.envois} envoi{currentBanqueScoring.envois > 1 ? 's' : ''} → <strong>{currentBanqueScoring.tauxAccordPct} % d'acceptation</strong> avec cette banque.
+              {currentBanqueScoring.tauxAccordPct < 40 && ' Taux faible — vérifie que le profil colle bien à leur cible.'}
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           <div>
