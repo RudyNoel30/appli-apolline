@@ -21,6 +21,7 @@ import { Upload, RefreshCw, AlertCircle, Loader2, Folder } from 'lucide-react'
 import { toast } from 'sonner'
 import PieceCard from './PieceCard'
 import PiecePreviewModal from './PiecePreviewModal'
+import ExtractionPreview from './ExtractionPreview'
 import Modal from './Modal'
 import { pieces as piecesApi, type PieceMeta } from '@/db/api'
 import { piecesByCategorie } from '@/data/mock'
@@ -41,6 +42,8 @@ export default function TabPiecesLocal({ dossier }: Props) {
   const [uploading, setUploading] = useState(0)
   const [previewing, setPreviewing] = useState<PieceMeta | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<PieceMeta | null>(null)
+  const [extractionPreview, setExtractionPreview] = useState<PieceMeta | null>(null)
+  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set())
 
   // Charge la liste
   const reload = useCallback(async () => {
@@ -108,6 +111,39 @@ export default function TabPiecesLocal({ dossier }: Props) {
       toast.error('Échec téléchargement', { description: e instanceof Error ? e.message : String(e) })
     }
   }, [])
+
+  // Extraction OCR : lance l'analyse Claude Vision et ouvre la modale de validation
+  const onAnalyze = useCallback(async (p: PieceMeta) => {
+    setAnalyzingIds((prev) => new Set(prev).add(p.id))
+    const t = toast.loading(`Analyse IA de "${p.filename}"…`)
+    try {
+      const res = await piecesApi.extract(p.id)
+      if (!res.ok) {
+        toast.error('Échec extraction', { id: t, description: res.error ?? 'Document non reconnu' })
+        await reload()
+        return
+      }
+      toast.success('Extraction terminée', {
+        id: t,
+        description: `Type détecté : ${res.type} · confiance ${((res.confidence ?? 0) * 100).toFixed(0)}%`,
+      })
+      // Recharge la pièce avec les données extraites et ouvre la modale
+      const updated = await piecesApi.list(dossier.id)
+      setList(updated)
+      const fresh = updated.find((x) => x.id === p.id)
+      if (fresh) setExtractionPreview(fresh)
+    } catch (e) {
+      toast.error('Erreur extraction', { id: t, description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setAnalyzingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(p.id)
+        return next
+      })
+    }
+  }, [dossier.id, reload])
+
+  const onShowExtraction = useCallback((p: PieceMeta) => setExtractionPreview(p), [])
   const doDelete = useCallback(async () => {
     if (!confirmDelete) return
     try {
@@ -208,6 +244,9 @@ export default function TabPiecesLocal({ dossier }: Props) {
                         onPreview={onPreview}
                         onDownload={onDownload}
                         onDelete={(p) => setConfirmDelete(p)}
+                        onAnalyze={onAnalyze}
+                        onShowExtraction={onShowExtraction}
+                        analyzing={analyzingIds.has(p.id)}
                       />
                     ))}
                   </div>
@@ -220,6 +259,21 @@ export default function TabPiecesLocal({ dossier }: Props) {
 
       {/* Modale aperçu */}
       <PiecePreviewModal piece={previewing} onClose={() => setPreviewing(null)} />
+
+      {/* Modale extraction OCR (plein écran) */}
+      {extractionPreview && (
+        <ExtractionPreview
+          open
+          onClose={() => setExtractionPreview(null)}
+          piece={extractionPreview}
+          onApplied={() => {
+            void reload()
+            // Propage aux autres onglets (Revenus etc.) pour rafraîchir les chiffres
+            window.dispatchEvent(new CustomEvent('apolline:pieces-changed', { detail: { dossierId: dossier.id } }))
+            window.dispatchEvent(new CustomEvent('apolline:dossier-changed', { detail: { dossierId: dossier.id } }))
+          }}
+        />
+      )}
 
       {/* Modale confirmation suppression */}
       {confirmDelete && (

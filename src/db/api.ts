@@ -155,6 +155,13 @@ export const rgpd = {
 
 /* ────────────────── Pièces (filesystem) ────────────────── */
 
+export type ExtractionType =
+  | 'bulletin_salaire' | 'avis_imposition' | 'rib' | 'cni'
+  | 'justif_domicile' | 'compromis' | 'dpe' | 'autre'
+
+export type ExtractionStatus =
+  | 'pending' | 'processing' | 'completed' | 'failed' | 'applied' | 'rejected'
+
 export type PieceMeta = {
   id: string
   dossierId: string
@@ -167,6 +174,25 @@ export type PieceMeta = {
   statut: 'valide' | 'a_fournir' | 'manquant' | 'expire'
   uploadedBy: string | null
   uploadedAt: string
+  // Extraction OCR (Phase 1)
+  extractionType?: ExtractionType | null
+  extractionStatus?: ExtractionStatus | null
+  extractedData?: Record<string, unknown> | null
+  extractionConfidence?: number | null
+  extractionError?: string | null
+  extractedAt?: string | null
+  appliedAt?: string | null
+  appliedBy?: string | null
+}
+
+export type ExtractResponse = {
+  ok: boolean
+  status: 'completed' | 'failed'
+  type: ExtractionType
+  data?: Record<string, unknown> | null
+  confidence?: number
+  error?: string
+  usage?: { inputTokens: number; outputTokens: number; estimatedCostEur: number }
 }
 
 export const pieces = {
@@ -287,6 +313,27 @@ export const pieces = {
   /** Met à jour les métadonnées (catégorie, libellé, statut). */
   async update(pieceId: string, patch: Partial<Pick<PieceMeta, 'categorie' | 'libelle' | 'statut'>>): Promise<void> {
     await request('PATCH', `/api/pieces/${encodeURIComponent(pieceId)}`, patch)
+  },
+  /**
+   * Lance l'extraction OCR + structuration de la pièce.
+   * Si type=null/undefined → Claude classifie automatiquement le document.
+   * Sinon → utilise le type fourni directement.
+   * Retour : données extraites + confidence + coût.
+   */
+  async extract(pieceId: string, type?: ExtractionType): Promise<ExtractResponse> {
+    return request('POST', `/api/pieces/${encodeURIComponent(pieceId)}/extract`, type ? { type } : {})
+  },
+  /**
+   * Applique les données extraites au dossier / client.
+   * dossierPatch : { rfn: 45000, ... } pour la table dossiers.
+   * clientPatch  : { emprunteur1: { revenuMensuel: ..., ... } } pour la table clients.
+   */
+  async applyExtraction(pieceId: string, patch: { dossierPatch?: Record<string, unknown>; clientPatch?: Record<string, unknown> }): Promise<void> {
+    await request('POST', `/api/pieces/${encodeURIComponent(pieceId)}/apply-extraction`, patch)
+  },
+  /** Rejette une extraction (le user ne veut pas l'appliquer). */
+  async rejectExtraction(pieceId: string): Promise<void> {
+    await request('POST', `/api/pieces/${encodeURIComponent(pieceId)}/reject-extraction`, {})
   },
 }
 

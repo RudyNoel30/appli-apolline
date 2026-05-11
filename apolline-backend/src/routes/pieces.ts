@@ -26,6 +26,10 @@ import {
   writeFile, readFileStream, deleteFile,
   isMimeAllowed, categoryFromFilename, PIECE_MAX_SIZE,
 } from '../lib/pieces-storage.js'
+import {
+  classifyDocument, extractDocument, isExtractionAvailable,
+} from '../lib/extraction/engine.js'
+import type { ExtractionType } from '../lib/extraction/prompts.js'
 
 /** Helper : supprime un fichier sans throw (pour cleanup en cas d'erreur). */
 async function deleteFileQuiet(dossierId: string, pieceId: string): Promise<void> {
@@ -248,6 +252,187 @@ piecesRoute.patch('/pieces/:id', authMiddleware, async (c) => {
   await notifyChange({ table: 'pieces' as never, action: 'update', id })
   // Suppression du paramètre `and` non utilisé ici, mais conservé en import en cas d'évolution
   void and
+  return c.json({ ok: true })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OCR / Extraction automatique (Phase 1) — bulletin_salaire + avis_imposition
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lance l'extraction OCR + structuration d'une pièce.
+ * Body optionnel : { type?: ExtractionType, autoClassify?: boolean }
+ *   - Si type fourni → on l'utilise directement
+ *   - Sinon (ou autoClassify=true) → on classifie d'abord puis on extrait
+ */
+piecesRoute.post('/pieces/:id/extract', authMiddleware, async (c) => {
+  const u = getUser(c)
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'id manquant' }, 400)
+  if (!isExtractionAvailable()) {
+    return c.json({ error: 'Extraction indisponible — ANTHROPIC_API_KEY non configurée côté backend' }, 503)
+  }
+
+  const [piece] = await db.select().from(schema.pieces).where(eq(schema.pieces.id, id))
+  if (!piece) return c.json({ error: 'pièce introuvable' }, 404)
+
+  const body = await c.req.json().catch(() => ({})) as { type?: string; autoClassify?: boolean }
+
+  // 1. Détermine le type cible
+  let targetType: ExtractionType
+  if (body.type && ['bulletin_salaire', 'avis_imposition', 'rib', 'cni', 'justif_domicile', 'compromis', 'dpe', 'autre'].includes(body.type)) {
+    targetType = body.type as ExtractionType
+  } else {
+    // Marque la pièce en cours de classification (UX feedback côté front)
+    await db.update(schema.pieces)
+      .set({ extractionStatus: 'processing' } as never)
+      .where(eq(schema.pieces.id, id))
+    const cls = await classifyDocument(piece.dossierId, piece.id, piece.mimeType)
+    targetType = cls.type
+    if (cls.type === 'autre') {
+      // Pas la peine d'extraire un document inconnu — on stoppe ici avec un statut "failed"
+      await db.update(schema.pieces).set({
+        extractionStatus: 'failed',
+        extractionType: 'autre',
+        extractionError: `Type non reconnu (${cls.reason || 'classification incertaine'})`,
+        extractedAt: sql`NOW()` as unknown as string,
+      } as never).where(eq(schema.pieces.id, id))
+      return c.json({
+        ok: false,
+        status: 'failed',
+        type: 'autre',
+        error: cls.reason || 'Type non reconnu',
+      })
+    }
+  }
+
+  // 2. Marque processing + sauve le type détecté
+  await db.update(schema.pieces).set({
+    extractionStatus: 'processing',
+    extractionType: targetType,
+  } as never).where(eq(schema.pieces.id, id))
+
+  // 3. Extraction Claude
+  const result = await extractDocument(piece.dossierId, piece.id, piece.mimeType, targetType)
+
+  // 4. Persist résultat
+  if (result.status === 'completed') {
+    await db.update(schema.pieces).set({
+      extractionStatus: 'completed',
+      extractionType: result.type,
+      extractedData: result.data as never,
+      extractionConfidence: result.confidence,
+      extractionError: null,
+      extractedAt: sql`NOW()` as unknown as string,
+    } as never).where(eq(schema.pieces.id, id))
+  } else {
+    await db.update(schema.pieces).set({
+      extractionStatus: 'failed',
+      extractionType: result.type,
+      extractionError: result.error ?? 'Erreur inconnue',
+      extractedAt: sql`NOW()` as unknown as string,
+    } as never).where(eq(schema.pieces.id, id))
+  }
+
+  await notifyChange({ table: 'pieces' as never, action: 'update', id })
+  audit({
+    action: 'update', userId: u.sub, userEmail: u.email,
+    entityType: 'piece', entityId: id,
+    details: `extraction ${targetType} · ${result.status} · confidence=${result.confidence.toFixed(2)} · coût ≈ ${result.usage.estimatedCostEur}€`,
+    ...ctxMeta(c),
+  })
+
+  return c.json({
+    ok: result.status === 'completed',
+    status: result.status,
+    type: result.type,
+    data: result.data,
+    confidence: result.confidence,
+    error: result.error,
+    usage: result.usage,
+  })
+})
+
+/**
+ * Applique les données extraites au dossier / client.
+ * Body : { fields: { [path: string]: value } }
+ *   - path est une chaîne dot-notation (ex: "client.emprunteur1.revenuMensuelNet")
+ *   - Le front choisit quels champs il veut appliquer (peut rejeter ou corriger)
+ *
+ * Met aussi le statut extraction_status à 'applied'.
+ */
+piecesRoute.post('/pieces/:id/apply-extraction', authMiddleware, async (c) => {
+  const u = getUser(c)
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'id manquant' }, 400)
+
+  const [piece] = await db.select().from(schema.pieces).where(eq(schema.pieces.id, id))
+  if (!piece) return c.json({ error: 'pièce introuvable' }, 404)
+  if (piece.extractionStatus !== 'completed' && piece.extractionStatus !== 'applied') {
+    return c.json({ error: `extraction non disponible (statut: ${piece.extractionStatus ?? 'aucun'})` }, 400)
+  }
+
+  const body = await c.req.json().catch(() => null) as {
+    dossierPatch?: Record<string, unknown>
+    clientPatch?: Record<string, unknown>
+  } | null
+  if (!body) return c.json({ error: 'body JSON requis' }, 400)
+
+  // Charge dossier + client
+  const [dossier] = await db.select().from(schema.dossiers).where(eq(schema.dossiers.id, piece.dossierId))
+  if (!dossier) return c.json({ error: 'dossier introuvable' }, 404)
+
+  // Applique les patches
+  if (body.dossierPatch && Object.keys(body.dossierPatch).length > 0) {
+    await db.update(schema.dossiers)
+      .set(body.dossierPatch as never)
+      .where(eq(schema.dossiers.id, piece.dossierId))
+    await notifyChange({ table: 'dossiers' as never, action: 'update', id: piece.dossierId })
+  }
+  if (body.clientPatch && Object.keys(body.clientPatch).length > 0 && dossier.clientId) {
+    await db.update(schema.clients)
+      .set(body.clientPatch as never)
+      .where(eq(schema.clients.id, dossier.clientId))
+    await notifyChange({ table: 'clients' as never, action: 'update', id: dossier.clientId })
+  }
+
+  // Marque la pièce comme appliquée
+  await db.update(schema.pieces).set({
+    extractionStatus: 'applied',
+    appliedAt: sql`NOW()` as unknown as string,
+    appliedBy: u.sub,
+  } as never).where(eq(schema.pieces.id, id))
+
+  audit({
+    action: 'update', userId: u.sub, userEmail: u.email,
+    entityType: 'piece', entityId: id,
+    details: `extraction appliquée au dossier ${piece.dossierId}`,
+    ...ctxMeta(c),
+  })
+
+  return c.json({ ok: true })
+})
+
+/**
+ * Rejette une extraction (le user a vu le résultat et ne veut pas l'appliquer).
+ * Garde la trace pour audit, mais désactive l'overlay côté UI.
+ */
+piecesRoute.post('/pieces/:id/reject-extraction', authMiddleware, async (c) => {
+  const u = getUser(c)
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'id manquant' }, 400)
+
+  await db.update(schema.pieces).set({
+    extractionStatus: 'rejected',
+  } as never).where(eq(schema.pieces.id, id))
+
+  audit({
+    action: 'update', userId: u.sub, userEmail: u.email,
+    entityType: 'piece', entityId: id,
+    details: 'extraction rejetée par utilisateur',
+    ...ctxMeta(c),
+  })
+
   return c.json({ ok: true })
 })
 

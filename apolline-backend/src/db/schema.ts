@@ -448,6 +448,19 @@ export const pieces = pgTable('pieces', {
   fichier: text('fichier'),                             // @deprecated chemin OneDrive ou nom local
   statut: text('statut', { enum: ['valide', 'a_fournir', 'manquant', 'expire'] }).notNull().default('a_fournir'),
   dateAjout: timestamp('date_ajout', { withTimezone: true, mode: 'string' }),
+  // ─── OCR / Extraction automatique (Phase 1) ──────────────────────────────
+  extractionType: text('extraction_type', {
+    enum: ['bulletin_salaire', 'avis_imposition', 'rib', 'cni', 'justif_domicile', 'compromis', 'dpe', 'autre'],
+  }),
+  extractionStatus: text('extraction_status', {
+    enum: ['pending', 'processing', 'completed', 'failed', 'applied', 'rejected'],
+  }),
+  extractedData: jsonb('extracted_data').$type<Record<string, unknown> | null>(),
+  extractionConfidence: real('extraction_confidence'),
+  extractionError: text('extraction_error'),
+  extractedAt: timestamp('extracted_at', { withTimezone: true, mode: 'string' }),
+  appliedAt: timestamp('applied_at', { withTimezone: true, mode: 'string' }),
+  appliedBy: text('applied_by'),
 }, (t) => ({
   dossierIdx: index('pieces_dossier_id_idx').on(t.dossierId),
   sha256Idx: index('pieces_sha256_idx').on(t.sha256),
