@@ -38,7 +38,11 @@ export default function Modal({ open, onClose, title, description, children, act
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'relative bg-white rounded-xl2 shadow-raised w-full max-h-[85vh] flex flex-col animate-scale-in',
+          // h-[90vh] + max-h impose une hauteur stable ; flex-col + min-h-0
+          // permet à la zone scrollable de bien se rétracter et le footer
+          // d'être toujours visible. On force aussi overflow-hidden au
+          // container pour que rien ne dépasse les rounded corners.
+          'relative bg-white rounded-xl2 shadow-raised w-full max-h-[90vh] flex flex-col animate-scale-in overflow-hidden',
           widths[size],
         )}
       >
@@ -54,7 +58,10 @@ export default function Modal({ open, onClose, title, description, children, act
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">
+        {/* min-h-0 CRITIQUE : sans lui le flex-1 hérite de min-height:auto
+            (= hauteur du contenu) et empêche le scroll de s'enclencher,
+            poussant le footer en dehors de la viewport. */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-5">
           {children}
         </div>
         {actions && (
