@@ -120,9 +120,9 @@ jobs:
         shell: pwsh
         run: |
           # URL des assets : GitHub Release de ce tag. Plus aucun passage par
-          # le VPS pour le MSI → zéro dépendance SSH/fail2ban.
-          # Le proxy nginx sur le VPS gère uniquement le /latest.json via 302
-          # redirect (cf. /opt/apolline-releases/nginx-snippet.conf).
+          # le VPS pour le MSI → zéro dépendance SSH.
+          # Caddy sur le VPS gère uniquement le /latest.json via 302 redirect
+          # (cf. doc/Caddyfile-updater).
           $version = "${{ steps.version.outputs.version }}"
           $sig = "${{ steps.artifact.outputs.sig_content }}".Trim()
           $msiName = "${{ steps.artifact.outputs.msi_name }}"
@@ -163,8 +163,8 @@ jobs:
           prerelease: false
 
       # ───────────────────────────────────────────────────────────────────
-      # Plus aucun step SSH/scp ici. Le VPS sert juste de redirecteur
-      # (nginx return 302) pour /latest.json — voir doc/nginx-updater.conf.
+      # Plus aucun step SSH/scp ici. Caddy sur le VPS sert juste de
+      # redirecteur (return 302) pour /latest.json — voir doc/Caddyfile-updater.
       # Les MSI sont téléchargés directement depuis GitHub par le client Tauri.
       # ───────────────────────────────────────────────────────────────────
 

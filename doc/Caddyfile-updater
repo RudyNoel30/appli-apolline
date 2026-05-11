@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Config Caddy pour updates.apolline.groupe-apolline.eu
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Architecture depuis v0.1.94 : le workflow CI ne fait PLUS de scp vers le
+# VPS pour les MSI. Le client Tauri télécharge directement les MSI depuis
+# GitHub Releases (URL stockée dans latest.json).
+#
+# Le rôle du VPS se limite à servir une REDIRECTION 302 pour /latest.json
+# afin de préserver l'URL historique configurée dans tauri.conf.json côté
+# client (https://updates.apolline.groupe-apolline.eu/latest.json).
+#
+# ───────────────────────────────────────────────────────────────────────────
+# Installation
+# ───────────────────────────────────────────────────────────────────────────
+# 1. Édite /etc/caddy/Caddyfile
+# 2. Remplace le bloc existant `updates.apolline.groupe-apolline.eu { ... }`
+#    (qui fait probablement file_server) par le bloc ci-dessous
+# 3. caddy validate --config /etc/caddy/Caddyfile
+# 4. systemctl reload caddy
+# 5. curl -I https://updates.apolline.groupe-apolline.eu/latest.json
+#    → doit retourner HTTP 302 + location: github.com/...
+#
+# ───────────────────────────────────────────────────────────────────────────
+
+updates.apolline.groupe-apolline.eu {
+    # Redirection 302 du manifeste Tauri vers GitHub Release. L'URL
+    # "/releases/latest/download/<file>" est maintenue par GitHub pour
+    # pointer toujours vers la dernière release publiée — pas besoin de
+    # connaître la version courante.
+    redir /latest.json https://github.com/RudyNoel30/appli-apolline/releases/latest/download/latest.json 302
+
+    # Compat ascendante : si un client a en cache une ancienne URL MSI
+    # côté VPS (workflow d'avant v0.1.94), on le redirige vers la release
+    # versionnée correspondante.
+    # Pattern : /Extrapol_0.1.94_x64_en-US.msi → release v0.1.94 sur GitHub
+    @msi path_regexp msi ^/Extrapol_([0-9.]+)_(.+)$
+    redir @msi https://github.com/RudyNoel30/appli-apolline/releases/download/v{re.msi.1}/Extrapol_{re.msi.1}_{re.msi.2} 302
+
+    # Healthcheck simple (utile pour monitoring uptime externe)
+    respond /healthz "ok" 200
+
+    # Tout le reste → 404 propre
+    respond "Not found. See /latest.json for the Tauri updater manifest." 404
+}
