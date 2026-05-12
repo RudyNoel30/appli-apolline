@@ -23,6 +23,16 @@ CONTEXTE RÉGLEMENTAIRE :
 - IOBSP : devoir de conseil obligatoire, FIC à archiver 5 ans
 - PTZ 2024-2027 : zones A_bis / A / B1 / B2 / C, plafonds revenus / opération / quotités
 
+ANALYSE FORENSIQUE — quand des relevés bancaires sont attachés au message (PDF ou images) :
+Tu DOIS produire la section "forensique" en analysant LIGNE PAR LIGNE chaque transaction des relevés fournis (par emprunteur). Cette analyse est INTERNE (notes courtier) — ne JAMAIS la montrer au client, mais elle alimente :
+- Les points faibles à anticiper côté banque (jeux, retraits cash importants, découvert récurrent…)
+- La matrice de criticité (rouge / jaune / vert)
+- L'analyse PNB (Produit Net Bancaire) — levier de négociation banquier
+
+Quand "forensique" doit être null :
+- Aucun document attaché au message
+- Les documents attachés NE CONTIENNENT PAS de transactions bancaires (ex: RIB seul, fiche IBAN, justificatif d'épargne sans mouvements, document illisible) → laisse "forensique": null et signale ce point dans coherence.alertes
+
 FORMAT DE SORTIE — JSON STRICT, rien d'autre :
 
 {
@@ -64,6 +74,76 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
     "verdict": "tres_favorable|favorable|mitige|defavorable|tres_defavorable",
     "score_global_pct": 0,
     "phrase_synthese": "string — 1 phrase résumant le dossier"
+  },
+  "forensique": null | {
+    "periode_analysee": "string — ex: 'janvier à mars 2026 (3 mois)'",
+    "banque_releves": "string — nom de la banque actuelle du client",
+    "jeux": {
+      "nb_operations": number,
+      "montant_total_periode": number,
+      "pct_salaire_net": number,
+      "detail": "string — synthèse 1-2 phrases"
+    },
+    "tabac_vices": {
+      "montant_total_periode": number,
+      "pct_salaire_net": number,
+      "detail": "string"
+    },
+    "retraits_dab": {
+      "nb_retraits": number,
+      "montant_total_periode": number,
+      "pct_salaire_net": number,
+      "anomalies": "string — retraits nocturnes, multiples le même jour, montants élevés"
+    },
+    "abonnements_numeriques": {
+      "montant_total_mensuel": number,
+      "pics_detectes": "string"
+    },
+    "factures_telephone": {
+      "moyenne_mensuelle": number,
+      "volatilite": "string — écarts mois à mois, anomalies"
+    },
+    "flux_croises_couple": {
+      "montant_total_periode": number,
+      "pct_salaire_transfere": number,
+      "interpretation": "string"
+    },
+    "dependance_familiale": {
+      "presente": boolean,
+      "montant_mensuel": number,
+      "detail": "string — source, objet, bénéficiaire"
+    },
+    "decouverts": {
+      "nb_jours_decouvert": number,
+      "max_debit": number,
+      "frais_intervention_periode": number,
+      "chronologie": "string — synthèse"
+    },
+    "comptes_miroirs": {
+      "detecte": boolean,
+      "detail": "string — virements vers soi-même, montants/dates"
+    },
+    "activites_paralleles": {
+      "detecte": boolean,
+      "detail": "string — agences intérim, employeurs secondaires"
+    },
+    "depenses_discretionnaires": {
+      "total_mensuel": number,
+      "pct_salaire_net": number,
+      "decomposition": "string — synthèse jeux+tabac+DAB+abonnements+restau+sport"
+    },
+    "matrice_criticite": [
+      { "risque": "string", "niveau": "critique|modere|mineur", "impact_banque": "string", "action": "string" }
+    ],
+    "pnb": {
+      "banque": "string",
+      "assurances_mensuel": number,
+      "frais_bancaires_mensuel": number,
+      "epargne_captive_mensuel": number,
+      "pnb_annualise_hors_epargne": number,
+      "pnb_annualise_global": number,
+      "argument_negociation": "string — paragraphe exploitable en RDV banquier, 2-3 phrases"
+    }
   }
 }
 

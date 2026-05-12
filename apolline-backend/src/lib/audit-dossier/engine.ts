@@ -9,8 +9,10 @@
  *    (filtré sur tranches de revenus comparables des 12 derniers mois)
  */
 import Anthropic from '@anthropic-ai/sdk'
+import { promises as fs } from 'node:fs'
 import { db, schema } from '../../db/index.js'
-import { eq, sql } from 'drizzle-orm'
+import { eq, and, sql, inArray, desc } from 'drizzle-orm'
+import { pathFor } from '../pieces-storage.js'
 import { AUDIT_DOSSIER_PROMPT } from './prompt.js'
 
 const apiKey = process.env.ANTHROPIC_API_KEY
@@ -28,6 +30,67 @@ export type AuditResult = {
   data: Record<string, unknown> | null
   error?: string
   usage: { inputTokens: number; outputTokens: number; estimatedCostEur: number }
+  /** Nombre de relevés bancaires effectivement attachés à l'analyse (pour transparence UI) */
+  relevesAttaches?: number
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chargement des relevés bancaires P3 pour analyse forensique
+// ─────────────────────────────────────────────────────────────────────────────
+// Accepte PDF + images (JPG/PNG/WEBP) — les courtiers reçoivent souvent des
+// photos smartphone de relevés papier. Claude Vision gère les deux formats.
+//
+// Filtre exclusionnaire sur le nom de fichier pour écarter les pièces P3 qui
+// ne sont CLAIREMENT pas des relevés (RIB seul, fiche IBAN…) car ces fichiers
+// ont aucune transaction et feraient perdre des tokens à Claude pour rien.
+// Filtre PERMISSIF par défaut : tout ce qui n'est pas évidemment un non-relevé
+// passe (un fichier nommé "001.pdf" ou "janvier.pdf" est conservé).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Patterns de noms de fichiers à exclure (NON-relevés évidents) */
+const NOT_RELEVE_PATTERN = /^(?:rib|iban|ribcheque|cadre[\s_-]?bleu|fiche[\s_-]?iban|fiche[\s_-]?bancaire)\b/i
+
+const ALLOWED_RELEVE_MIME = [
+  'application/pdf',
+  'image/jpeg', 'image/png', 'image/webp',
+] as const
+
+type ReleveLoaded = {
+  filename: string
+  mimeType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp'
+  base64: string
+}
+
+/**
+ * Charge les pièces P3 candidates à l'analyse forensique du dossier.
+ * Max 3 fichiers les plus récents, taille max 8 Mo / fichier.
+ */
+async function loadRelevesP3(dossierId: string): Promise<ReleveLoaded[]> {
+  const rows = await db.select().from(schema.pieces).where(and(
+    eq(schema.pieces.dossierId, dossierId),
+    eq(schema.pieces.categorie, 'P3'),
+    inArray(schema.pieces.mimeType, ALLOWED_RELEVE_MIME as unknown as string[]),
+  )).orderBy(desc(schema.pieces.uploadedAt))  // plus récent d'abord
+
+  const filtered = rows
+    .filter((r) => (r.sizeBytes ?? 0) <= 8 * 1024 * 1024)
+    .filter((r) => !NOT_RELEVE_PATTERN.test(r.filename))
+    .slice(0, 3)  // 3 plus récents valides
+
+  const results: ReleveLoaded[] = []
+  for (const piece of filtered) {
+    try {
+      const buf = await fs.readFile(pathFor(piece.dossierId, piece.id))
+      results.push({
+        filename: piece.filename,
+        mimeType: piece.mimeType as ReleveLoaded['mimeType'],
+        base64: buf.toString('base64'),
+      })
+    } catch (e) {
+      console.warn(`[audit] impossible de lire relevé P3 ${piece.id}:`, e instanceof Error ? e.message : String(e))
+    }
+  }
+  return results
 }
 
 function estimateCost(u: { input_tokens: number; output_tokens: number }): number {
@@ -195,16 +258,52 @@ export async function auditDossier(dossierId: string): Promise<AuditResult> {
     },
   }
 
-  // 4. Appel Claude
+  // 4. Charge les relevés bancaires P3 pour analyse forensique (si présents)
+  const releves = await loadRelevesP3(dossierId)
+
+  // 5. Construit le content user : JSON contexte + relevés en pièces jointes.
+  //    Les PDFs passent en "document" block, les images en "image" block.
+  type DocumentBlock = { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string }; title?: string }
+  type ImageBlock = { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/webp'; data: string } }
+  type TextBlock = { type: 'text'; text: string }
+  const userContent: Array<TextBlock | DocumentBlock | ImageBlock> = []
+
+  // D'abord les relevés (Claude les traite mieux quand ils sont avant le texte explicatif)
+  for (const r of releves) {
+    if (r.mimeType === 'application/pdf') {
+      userContent.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: r.base64 },
+        title: r.filename,
+      })
+    } else {
+      // Image : JPG/PNG/WEBP — photo smartphone d'un relevé papier
+      userContent.push({
+        type: 'image',
+        source: { type: 'base64', media_type: r.mimeType, data: r.base64 },
+      })
+    }
+  }
+
+  const forensicInstr = releves.length > 0
+    ? `\n\n⚠️ ${releves.length} relevé(s) bancaire(s) attaché(s) → tu DOIS produire la section "forensique" complète (13 catégories) en analysant ligne par ligne ces relevés.`
+    : `\n\n(Pas de relevés bancaires attachés — laisse la section "forensique" à null.)`
+
+  userContent.push({
+    type: 'text',
+    text: `Voici le contexte du dossier à auditer :\n\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\`${forensicInstr}\n\nProduis l'audit complet selon le format JSON spécifié.`,
+  })
+
+  // 6. Appel Claude
   try {
     const res = await client.messages.create({
       model: AUDIT_MODEL,
-      max_tokens: 6000,
+      max_tokens: releves.length > 0 ? 12000 : 6000,  // plus de tokens si forensique
       system: AUDIT_DOSSIER_PROMPT,
       messages: [
         {
           role: 'user',
-          content: `Voici le contexte du dossier à auditer :\n\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\`\n\nProduis l'audit complet selon le format JSON spécifié.`,
+          content: userContent as unknown as Anthropic.MessageParam['content'],
         },
       ],
     })
@@ -220,6 +319,7 @@ export async function auditDossier(dossierId: string): Promise<AuditResult> {
           outputTokens: res.usage.output_tokens,
           estimatedCostEur: estimateCost(res.usage),
         },
+        relevesAttaches: releves.length,
       }
     }
 
@@ -231,12 +331,14 @@ export async function auditDossier(dossierId: string): Promise<AuditResult> {
         outputTokens: res.usage.output_tokens,
         estimatedCostEur: estimateCost(res.usage),
       },
+      relevesAttaches: releves.length,
     }
   } catch (e) {
     return {
       status: 'failed', data: null,
       error: e instanceof Error ? e.message : String(e),
       usage: { inputTokens: 0, outputTokens: 0, estimatedCostEur: 0 },
+      relevesAttaches: releves.length,
     }
   }
 }
