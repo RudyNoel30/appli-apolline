@@ -77,6 +77,7 @@ export default function DossierDetail() {
   const [auditLoading, setAuditLoading] = useState(false)
   const [auditResult, setAuditResult] = useState<AuditDossierResult | null>(null)
   const [auditCost, setAuditCost] = useState<number | undefined>(undefined)
+  const [auditReleves, setAuditReleves] = useState<number | undefined>(undefined)
   const [editModal, setEditModal] = useState(false)
   const [aiModal, setAiModal] = useState<{ title: string } | null>(null)
   const [aiResult, setAiResult] = useState<AiGenerateResult | null>(null)
@@ -172,12 +173,17 @@ export default function DossierDetail() {
     setAuditLoading(true)
     setAuditResult(null)
     setAuditCost(undefined)
+    setAuditReleves(undefined)
     try {
       const res = await auditDossierApi.run(dossier.id)
       setAuditResult(res.data)
       setAuditCost(res.usage.estimatedCostEur)
+      setAuditReleves(res.relevesAttaches)
+      const relevSuffix = res.relevesAttaches > 0
+        ? ` · ${res.relevesAttaches} relevé(s) bancaire(s) analysé(s)`
+        : ''
       toast.success('Audit terminé', {
-        description: `${res.data.synthese.score_global_pct}/100 · ${res.data.synthese.phrase_synthese}`,
+        description: `${res.data.synthese.score_global_pct}/100 · ${res.data.synthese.phrase_synthese}${relevSuffix}`,
         duration: 6000,
       })
     } catch (e) {
@@ -539,6 +545,7 @@ export default function DossierDetail() {
         loading={auditLoading}
         dossierRef={dossier.ref}
         estimatedCostEur={auditCost}
+        relevesAttaches={auditReleves}
       />
     </>
   )

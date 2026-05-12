@@ -339,6 +339,32 @@ export const pieces = {
 
 /* ────────────────── Audit IA d'un dossier ────────────────── */
 
+export type AuditForensique = {
+  periode_analysee: string
+  banque_releves: string
+  jeux: { nb_operations: number; montant_total_periode: number; pct_salaire_net: number; detail: string }
+  tabac_vices: { montant_total_periode: number; pct_salaire_net: number; detail: string }
+  retraits_dab: { nb_retraits: number; montant_total_periode: number; pct_salaire_net: number; anomalies: string }
+  abonnements_numeriques: { montant_total_mensuel: number; pics_detectes: string }
+  factures_telephone: { moyenne_mensuelle: number; volatilite: string }
+  flux_croises_couple: { montant_total_periode: number; pct_salaire_transfere: number; interpretation: string }
+  dependance_familiale: { presente: boolean; montant_mensuel: number; detail: string }
+  decouverts: { nb_jours_decouvert: number; max_debit: number; frais_intervention_periode: number; chronologie: string }
+  comptes_miroirs: { detecte: boolean; detail: string }
+  activites_paralleles: { detecte: boolean; detail: string }
+  depenses_discretionnaires: { total_mensuel: number; pct_salaire_net: number; decomposition: string }
+  matrice_criticite: Array<{ risque: string; niveau: 'critique' | 'modere' | 'mineur'; impact_banque: string; action: string }>
+  pnb: {
+    banque: string
+    assurances_mensuel: number
+    frais_bancaires_mensuel: number
+    epargne_captive_mensuel: number
+    pnb_annualise_hors_epargne: number
+    pnb_annualise_global: number
+    argument_negociation: string
+  }
+}
+
 export type AuditDossierResult = {
   points_forts: Array<{ categorie: string; libelle: string; details: string }>
   points_faibles: Array<{ categorie: string; libelle: string; details: string; gravite: 'haute' | 'moyenne' | 'basse'; mitigation: string }>
@@ -369,11 +395,13 @@ export type AuditDossierResult = {
     score_global_pct: number
     phrase_synthese: string
   }
+  /** Analyse forensique 13 catégories — null si pas de relevés bancaires attachés */
+  forensique: AuditForensique | null
 }
 
 export const auditDossier = {
-  /** Lance l'audit IA d'un dossier. Coût ~0.05 €, durée ~10s. */
-  async run(dossierId: string): Promise<{ ok: boolean; data: AuditDossierResult; usage: { inputTokens: number; outputTokens: number; estimatedCostEur: number } }> {
+  /** Lance l'audit IA d'un dossier. Coût ~0.05 € sans relevés / ~0.50 € avec 3 relevés P3. */
+  async run(dossierId: string): Promise<{ ok: boolean; data: AuditDossierResult; usage: { inputTokens: number; outputTokens: number; estimatedCostEur: number }; relevesAttaches: number }> {
     return request('POST', `/api/dossiers/${encodeURIComponent(dossierId)}/audit`, {})
   },
 }

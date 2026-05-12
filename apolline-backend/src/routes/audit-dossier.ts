@@ -30,5 +30,10 @@ auditDossierRoute.post('/dossiers/:id/audit', authMiddleware, async (c) => {
     return c.json({ error: result.error ?? 'Audit échoué', usage: result.usage }, 502)
   }
 
-  return c.json({ ok: true, data: result.data, usage: result.usage })
+  return c.json({
+    ok: true,
+    data: result.data,
+    usage: result.usage,
+    relevesAttaches: result.relevesAttaches ?? 0,
+  })
 })

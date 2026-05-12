@@ -16,12 +16,12 @@
 import { useState } from 'react'
 import {
   Sparkles, CheckCircle2, AlertTriangle, XCircle, Copy, Check, ShieldCheck,
-  TrendingUp, Building2, AlertCircle, FileText,
+  TrendingUp, Building2, AlertCircle, FileText, Eye, EyeOff, Banknote,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import FullScreenSheet from './FullScreenSheet'
-import type { AuditDossierResult } from '@/db/api'
-import { cn, eur } from '@/lib/utils'
+import type { AuditDossierResult, AuditForensique } from '@/db/api'
+import { cn, eur, pct } from '@/lib/utils'
 
 type Props = {
   open: boolean
@@ -31,6 +31,8 @@ type Props = {
   dossierRef: string
   /** Coût estimé en € (affiché en footer pour transparence) */
   estimatedCostEur?: number
+  /** Nombre de relevés bancaires attachés à l'analyse (affiché en footer) */
+  relevesAttaches?: number
 }
 
 const VERDICT_LABEL: Record<AuditDossierResult['synthese']['verdict'], string> = {
@@ -55,8 +57,9 @@ const GRAVITE_COLOR = {
   basse: 'border-navy-200 bg-navy-50/40',
 } as const
 
-export default function AuditDossierModal({ open, onClose, audit, loading, dossierRef, estimatedCostEur }: Props) {
+export default function AuditDossierModal({ open, onClose, audit, loading, dossierRef, estimatedCostEur, relevesAttaches }: Props) {
   const [ddpCopied, setDdpCopied] = useState(false)
+  const [showForensic, setShowForensic] = useState(true)
 
   const onCopyDDP = async () => {
     if (!audit) return
@@ -87,11 +90,22 @@ export default function AuditDossierModal({ open, onClose, audit, loading, dossi
       )}
       actions={
         <>
-          {estimatedCostEur != null && (
-            <span className="text-[11px] text-navy-400 mr-auto">
-              Coût IA : {estimatedCostEur.toFixed(4)} €
-            </span>
-          )}
+          <span className="text-[11px] text-navy-400 mr-auto flex items-center gap-3">
+            {estimatedCostEur != null && (
+              <span>Coût IA : {estimatedCostEur.toFixed(4)} €</span>
+            )}
+            {relevesAttaches != null && relevesAttaches > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium">
+                <Banknote className="h-3 w-3" />
+                {relevesAttaches} relevé{relevesAttaches > 1 ? 's' : ''} analysé{relevesAttaches > 1 ? 's' : ''}
+              </span>
+            )}
+            {relevesAttaches === 0 && (
+              <span className="text-amber-700 italic">
+                Aucun relevé P3 attaché — analyse forensique non disponible
+              </span>
+            )}
+          </span>
           <button onClick={onClose} className="btn-ghost">Fermer</button>
         </>
       }
@@ -316,9 +330,174 @@ export default function AuditDossierModal({ open, onClose, audit, loading, dossi
               {audit.suggestion_ddp.corps}
             </div>
           </div>
+
+          {/* ─── ANALYSE FORENSIQUE (interne) ──────────────────────────── */}
+          {audit.forensique && (
+            <ForensiqueSection
+              forensique={audit.forensique}
+              show={showForensic}
+              onToggle={() => setShowForensic((v) => !v)}
+            />
+          )}
         </div>
       )}
     </FullScreenSheet>
+  )
+}
+
+// ─── Section forensique — INTERNE, ne pas exposer au client ───────────────
+function ForensiqueSection({ forensique, show, onToggle }: { forensique: AuditForensique; show: boolean; onToggle: () => void }) {
+  const criticite = forensique.matrice_criticite ?? []
+  const niveauColor: Record<string, string> = {
+    critique: 'bg-rose-100 text-rose-900 border-rose-300',
+    modere:   'bg-amber-100 text-amber-900 border-amber-300',
+    mineur:   'bg-navy-100 text-navy-800 border-navy-200',
+  }
+  return (
+    <div className="card p-0 border-l-4 border-rose-500 overflow-hidden">
+      {/* Bandeau avertissement */}
+      <div className="bg-rose-50 px-4 py-2.5 border-b border-rose-200 flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-rose-700" />
+        <div className="flex-1">
+          <div className="text-sm font-serif font-semibold text-rose-900">
+            Analyse forensique des relevés bancaires — INTERNE
+          </div>
+          <div className="text-[11px] text-rose-700">
+            Notes courtier uniquement · NE PAS exposer au client · Période : {forensique.periode_analysee}
+            {forensique.banque_releves && ` · Banque : ${forensique.banque_releves}`}
+          </div>
+        </div>
+        <button onClick={onToggle} className="btn-outline text-xs">
+          {show ? <><EyeOff className="h-3.5 w-3.5" /> Masquer</> : <><Eye className="h-3.5 w-3.5" /> Afficher</>}
+        </button>
+      </div>
+
+      {show && (
+        <div className="p-4 space-y-4">
+          {/* ─── Matrice de criticité (le plus important — en tête) ─── */}
+          {criticite.length > 0 && (
+            <div>
+              <div className="text-xs uppercase tracking-wider text-navy-500 font-semibold mb-2">
+                Matrice de criticité — {criticite.length} risque{criticite.length > 1 ? 's' : ''}
+              </div>
+              <div className="space-y-1.5">
+                {criticite.map((r, i) => (
+                  <div key={i} className={cn(
+                    'rounded-lg border p-2.5 text-xs',
+                    niveauColor[r.niveau] ?? niveauColor.mineur,
+                  )}>
+                    <div className="flex items-start gap-2 mb-1">
+                      <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-white/60 shrink-0">
+                        {r.niveau === 'critique' ? '🔴 Critique' : r.niveau === 'modere' ? '🟡 Modéré' : '🟢 Mineur'}
+                      </span>
+                      <strong className="text-current">{r.risque}</strong>
+                    </div>
+                    <div className="ml-1 text-current/90"><strong>Impact banque :</strong> {r.impact_banque}</div>
+                    <div className="ml-1 text-current/80"><strong>Action :</strong> {r.action}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Dépenses discrétionnaires (chiffre clé) ─── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <ForensiqueMetric
+              label="Dépenses discrétionnaires"
+              value={`${eur(forensique.depenses_discretionnaires?.total_mensuel ?? 0)}/mois`}
+              hint={`${pct((forensique.depenses_discretionnaires?.pct_salaire_net ?? 0) / 100, 0)} du salaire`}
+              accent={(forensique.depenses_discretionnaires?.pct_salaire_net ?? 0) > 25 ? 'rose' : 'navy'}
+            />
+            <ForensiqueMetric
+              label="Retraits DAB"
+              value={eur(forensique.retraits_dab?.montant_total_periode ?? 0)}
+              hint={`${forensique.retraits_dab?.nb_retraits ?? 0} retraits`}
+              accent={(forensique.retraits_dab?.pct_salaire_net ?? 0) > 30 ? 'rose' : 'navy'}
+            />
+            <ForensiqueMetric
+              label="Jeux / Paris"
+              value={eur(forensique.jeux?.montant_total_periode ?? 0)}
+              hint={`${forensique.jeux?.nb_operations ?? 0} opérations`}
+              accent={(forensique.jeux?.montant_total_periode ?? 0) > 0 ? 'rose' : 'emerald'}
+            />
+            <ForensiqueMetric
+              label="Découverts"
+              value={`${forensique.decouverts?.nb_jours_decouvert ?? 0}j`}
+              hint={`Max ${eur(Math.abs(forensique.decouverts?.max_debit ?? 0))}`}
+              accent={(forensique.decouverts?.nb_jours_decouvert ?? 0) > 10 ? 'rose' : 'navy'}
+            />
+          </div>
+
+          {/* ─── Détails par catégorie (collapse-style sections) ─── */}
+          <div className="space-y-2">
+            {forensique.jeux?.detail && <ForensiqueRow icon="🎰" label="Jeux & paris" text={forensique.jeux.detail} />}
+            {forensique.tabac_vices?.detail && <ForensiqueRow icon="🚬" label="Tabac / vices" text={forensique.tabac_vices.detail} />}
+            {forensique.retraits_dab?.anomalies && <ForensiqueRow icon="💵" label="Retraits cash — anomalies" text={forensique.retraits_dab.anomalies} />}
+            {forensique.abonnements_numeriques?.pics_detectes && <ForensiqueRow icon="📱" label="Abonnements numériques" text={`${eur(forensique.abonnements_numeriques.montant_total_mensuel)}/mois · ${forensique.abonnements_numeriques.pics_detectes}`} />}
+            {forensique.factures_telephone?.volatilite && <ForensiqueRow icon="📞" label="Factures téléphone" text={`Moy. ${eur(forensique.factures_telephone.moyenne_mensuelle)}/mois · ${forensique.factures_telephone.volatilite}`} />}
+            {forensique.flux_croises_couple?.interpretation && <ForensiqueRow icon="↔️" label="Flux croisés couple" text={forensique.flux_croises_couple.interpretation} />}
+            {forensique.dependance_familiale?.presente && <ForensiqueRow icon="👨‍👩‍👧" label="Dépendance familiale" text={`${eur(forensique.dependance_familiale.montant_mensuel)}/mois · ${forensique.dependance_familiale.detail}`} accent="amber" />}
+            {forensique.decouverts?.chronologie && <ForensiqueRow icon="⚠️" label="Chronologie découverts" text={forensique.decouverts.chronologie} />}
+            {forensique.comptes_miroirs?.detecte && <ForensiqueRow icon="🪞" label="Comptes miroirs détectés" text={forensique.comptes_miroirs.detail} accent="rose" />}
+            {forensique.activites_paralleles?.detecte && <ForensiqueRow icon="💼" label="Activités parallèles" text={forensique.activites_paralleles.detail} accent="amber" />}
+          </div>
+
+          {/* ─── PNB — levier de négociation ─── */}
+          {forensique.pnb && (
+            <div className="rounded-xl2 bg-gold-50/30 border border-gold-300 p-4">
+              <div className="flex items-center gap-2 mb-3 text-gold-800">
+                <TrendingUp className="h-5 w-5" />
+                <h4 className="font-serif text-base font-semibold">PNB — Levier de négociation</h4>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                <Metric label="Assurances/mois" value={eur(forensique.pnb.assurances_mensuel)} accent="gold" />
+                <Metric label="Frais bancaires/mois" value={eur(forensique.pnb.frais_bancaires_mensuel)} accent="gold" />
+                <Metric label="Épargne captive/mois" value={eur(forensique.pnb.epargne_captive_mensuel)} accent="navy" />
+                <Metric label="PNB annualisé (hors épargne)" value={eur(forensique.pnb.pnb_annualise_hors_epargne)} accent="gold" />
+                <Metric label="PNB annualisé GLOBAL" value={eur(forensique.pnb.pnb_annualise_global)} accent="emerald" />
+              </div>
+              {forensique.pnb.argument_negociation && (
+                <div className="rounded-lg bg-white border border-gold-200 p-3 text-sm text-navy-800 leading-relaxed italic font-serif">
+                  💡 {forensique.pnb.argument_negociation}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ForensiqueRow({ icon, label, text, accent }: { icon: string; label: string; text: string; accent?: 'rose' | 'amber' }) {
+  return (
+    <div className={cn(
+      'rounded-lg border p-2.5 text-xs',
+      accent === 'rose' ? 'bg-rose-50 border-rose-200' :
+      accent === 'amber' ? 'bg-amber-50 border-amber-200' :
+      'bg-navy-50/40 border-navy-100',
+    )}>
+      <div className="font-semibold text-navy-900 mb-0.5">
+        <span className="mr-1.5">{icon}</span>
+        {label}
+      </div>
+      <div className="text-navy-700">{text}</div>
+    </div>
+  )
+}
+
+function ForensiqueMetric({ label, value, hint, accent }: { label: string; value: string; hint?: string; accent: 'navy' | 'rose' | 'emerald' }) {
+  const colors: Record<string, string> = {
+    navy: 'text-navy-900',
+    rose: 'text-rose-700',
+    emerald: 'text-emerald-700',
+  }
+  return (
+    <div className="rounded-lg border border-navy-100 bg-white p-2.5 text-center">
+      <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">{label}</div>
+      <div className={cn('font-serif text-lg font-bold tabular-nums', colors[accent])}>{value}</div>
+      {hint && <div className="text-[10px] text-navy-400 mt-0.5">{hint}</div>}
+    </div>
   )
 }
 
