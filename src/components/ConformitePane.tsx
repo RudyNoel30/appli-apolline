@@ -13,6 +13,7 @@ import { conformite, type ConformiteCertif, type ConformiteCertifType, type Conf
 import { useAuth, usePermissions } from '@/auth/AuthContext'
 import { useStore } from '@/stores/useStore'
 import { cn, dateFr } from '@/lib/utils'
+import { confirmDialog } from '@/lib/dialog'
 
 const CERTIF_TYPES: { value: ConformiteCertifType; label: string; description: string; icon: typeof Shield }[] = [
   { value: 'orias', label: 'Immatriculation ORIAS', description: 'À renouveler chaque 15 février (~30€/an)', icon: Award },
@@ -80,13 +81,13 @@ export default function ConformitePane() {
   }, [certifs])
 
   const onDeleteCertif = async (c: ConformiteCertif) => {
-    if (!confirm(`Supprimer "${c.libelle}" ?`)) return
+    if (!await confirmDialog(`Supprimer "${c.libelle}" ?`, { title: 'Supprimer certificat', kind: 'warning' })) return
     try { await conformite.deleteCertif(c.id); toast.success('Supprimé'); void load() }
     catch (e) { toast.error('Erreur', { description: e instanceof Error ? e.message : String(e) }) }
   }
 
   const onDeleteFormation = async (f: ConformiteFormation) => {
-    if (!confirm(`Supprimer "${f.titre}" ?`)) return
+    if (!await confirmDialog(`Supprimer "${f.titre}" ?`, { title: 'Supprimer formation', kind: 'warning' })) return
     try { await conformite.deleteFormation(f.id); toast.success('Supprimé'); void load() }
     catch (e) { toast.error('Erreur', { description: e instanceof Error ? e.message : String(e) }) }
   }

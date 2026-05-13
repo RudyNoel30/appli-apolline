@@ -13,6 +13,7 @@ import { useAuth, usePermissions } from '@/auth/AuthContext'
 import { saveFile, FILTERS } from '@/lib/saveFile'
 import { rgpd } from '@/db/api'
 import { cn, dateFr } from '@/lib/utils'
+import { confirmDialog } from '@/lib/dialog'
 import type { Client } from '@/data/mock'
 
 const safe = (s: unknown): string => (typeof s === 'string' ? s : '')
@@ -62,7 +63,23 @@ export default function RgpdPane() {
       toast.error('La raison doit faire au moins 10 caractères')
       return
     }
-    if (!confirm(`⚠️ ATTENTION — IRRÉVERSIBLE\n\nTu vas effacer définitivement :\n- ${eraseModal.prenom} ${eraseModal.nom}\n- ${eraseModal.dossierIds?.length ?? 0} dossier(s) associé(s)\n- Tous les prêts, notes, RDV, commissions liés\n\nCela ne peut PAS être annulé.\n\nConfirmer ?`)) return
+
+    const confirmed = await confirmDialog(
+      `⚠️ ATTENTION — IRRÉVERSIBLE\n\n` +
+      `Tu vas effacer définitivement :\n` +
+      `• ${eraseModal.prenom} ${eraseModal.nom}\n` +
+      `• ${eraseModal.dossierIds?.length ?? 0} dossier(s) associé(s)\n` +
+      `• Tous les prêts, notes, RDV, commissions liés\n\n` +
+      `Cela ne peut PAS être annulé.\n\nConfirmer la suppression ?`,
+      {
+        title: 'Effacement RGPD (Article 17)',
+        kind: 'warning',
+        okLabel: 'Effacer définitivement',
+        cancelLabel: 'Annuler',
+      },
+    )
+    if (!confirmed) return
+
     setErasing(true)
     try {
       const res = await rgpd.eraseClient(eraseModal.id, eraseReason.trim())

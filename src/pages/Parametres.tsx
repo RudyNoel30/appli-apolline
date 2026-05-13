@@ -14,6 +14,7 @@ import { ROLE_BADGE, type Collaborateur, type Role, type Banque } from '@/data/m
 import { useAuth } from '@/auth/AuthContext'
 import { useStore, getO365EmailFor, type Template, type Theme } from '@/stores/useStore'
 import { pct, cn, initials, dateFr, eur } from '@/lib/utils'
+import { confirmDialog } from '@/lib/dialog'
 import * as o365 from '@/o365/msal'
 import { O365_CLIENT_ID, O365_TENANT_ID } from '@/o365/config'
 import { saveFile, FILTERS } from '@/lib/saveFile'
@@ -1201,8 +1202,12 @@ function DonneesPane() {
             {resyncing ? 'Sync…' : 'Forcer la synchronisation'}
           </button>
           <button className="btn-outline" onClick={download}><Download className="h-4 w-4" /> Exporter en JSON</button>
-          <button className="btn text-rose-700 hover:bg-rose-50" onClick={() => {
-            if (confirm('Réinitialiser le cache local aux données de démo ? (n\'affecte pas la BDD partagée — vous récupérerez l\'état Postgres au prochain démarrage)')) {
+          <button className="btn text-rose-700 hover:bg-rose-50" onClick={async () => {
+            const ok = await confirmDialog(
+              'Réinitialiser le cache local aux données de démo ?\n\n(n\'affecte pas la BDD partagée — vous récupérerez l\'état Postgres au prochain démarrage)',
+              { title: 'Réinitialiser cache local', kind: 'warning' },
+            )
+            if (ok) {
               resetStore(); toast.success('Cache local réinitialisé')
             }
           }}>

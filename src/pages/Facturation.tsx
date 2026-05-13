@@ -17,6 +17,7 @@ import FactureFormModal from '@/components/FactureFormModal'
 import { factures as facturesApi, type Facture, type FactureType, type FactureStatut, type FactureStats } from '@/db/api'
 import { useStore } from '@/stores/useStore'
 import { cn, dateFr } from '@/lib/utils'
+import { confirmDialog } from '@/lib/dialog'
 
 const eur = (cents: number): string =>
   (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
@@ -87,7 +88,7 @@ export default function Facturation() {
   }, [search])
 
   const onRegler = async (f: Facture) => {
-    if (!confirm(`Marquer ${f.ref} comme réglée pour ${eur(f.montantTtc)} ?`)) return
+    if (!await confirmDialog(`Marquer ${f.ref} comme réglée pour ${eur(f.montantTtc)} ?`, { title: 'Régler la facture', kind: 'info' })) return
     try {
       await facturesApi.regler(f.id, { regleeLe: new Date().toISOString() })
       toast.success(`${f.ref} marquée réglée`)
@@ -98,11 +99,11 @@ export default function Facturation() {
   }
 
   const onAvoir = async (f: Facture) => {
-    const motif = prompt(`Créer un avoir sur ${f.ref} pour ${eur(f.montantTtc)} ?\nMotif :`)
-    if (!motif) return
+    // TODO : remplacer prompt() (cassé Tauri) par une vraie modale input avec motif.
+    if (!await confirmDialog(`Créer un avoir sur ${f.ref} pour ${eur(f.montantTtc)} ?`, { title: 'Avoir', kind: 'warning' })) return
     try {
-      const { avoir } = await facturesApi.avoir(f.id, { motif })
-      toast.success(`Avoir ${avoir.ref} créé`)
+      const { avoir } = await facturesApi.avoir(f.id, { motif: 'À préciser' })
+      toast.success(`Avoir ${avoir.ref} créé`, { description: 'Modifier le motif en ouvrant l\'avoir' })
       void load()
     } catch (e) {
       toast.error('Erreur', { description: e instanceof Error ? e.message : String(e) })
@@ -110,7 +111,7 @@ export default function Facturation() {
   }
 
   const onAnnuler = async (f: Facture) => {
-    if (!confirm(`Annuler la facture ${f.ref} ? (statut → annulée)`)) return
+    if (!await confirmDialog(`Annuler la facture ${f.ref} ? (statut → annulée)`, { title: 'Annuler la facture', kind: 'warning' })) return
     try {
       await facturesApi.cancel(f.id)
       toast.success(`${f.ref} annulée`)

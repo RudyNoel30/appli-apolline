@@ -25,6 +25,7 @@ import {
 } from '@/lib/finance'
 import PretsChart from './PretsChart'
 import { cn } from '@/lib/utils'
+import { confirmDialog } from '@/lib/dialog'
 
 const eur = (n: number, dec = 0) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: dec, maximumFractionDigits: dec })
 const pct = (n: number, dec = 2) => `${n.toFixed(dec)} %`
@@ -148,15 +149,15 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
     }
   }
 
-  const onRegenerer = () => {
+  const onRegenerer = async () => {
     if (!lisseur) return
-    if (!confirm(`Réinitialiser les paliers du prêt "${lisseur.libelle ?? lisseur.type}" ?`)) return
+    if (!await confirmDialog(`Réinitialiser les paliers du prêt "${lisseur.libelle ?? lisseur.type}" ?`, { title: 'Régénérer le plan', kind: 'warning' })) return
     updatePret(lisseur.id, { paliers: [], profilAmortissement: 'standard' })
     toast.success('Paliers réinitialisés')
   }
 
-  const onDeletePret = (p: Pret) => {
-    if (!confirm(`Supprimer le prêt "${p.libelle ?? PRET_TYPE_LABEL[p.type]}" ?`)) return
+  const onDeletePret = async (p: Pret) => {
+    if (!await confirmDialog(`Supprimer le prêt "${p.libelle ?? PRET_TYPE_LABEL[p.type]}" ?`, { title: 'Supprimer prêt', kind: 'warning' })) return
     deletePret(p.id)
     toast.success('Prêt supprimé')
   }

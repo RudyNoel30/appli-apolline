@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { factures, type Facture, type FactureType, type FactureCreate, type FactureModeReglement } from '@/db/api'
 import { useStore } from '@/stores/useStore'
 import { cn } from '@/lib/utils'
+import { confirmDialog } from '@/lib/dialog'
 
 type Props = {
   open: boolean
@@ -488,7 +489,7 @@ export default function FactureFormModal({ open, onClose, dossierId, edit, onSav
                 <button
                   onClick={async () => {
                     if (!selectedDossier || !edit.partenaireEmail) return
-                    if (!confirm(`Envoyer la facture ${edit.ref} par email à ${edit.partenaireEmail} via Outlook ?`)) return
+                    if (!await confirmDialog(`Envoyer la facture ${edit.ref} par email à ${edit.partenaireEmail} via Outlook ?`, { title: 'Envoi email', kind: 'info' })) return
                     try {
                       const html = buildFactureHtml({
                         facture: edit,

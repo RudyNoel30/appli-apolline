@@ -24,6 +24,7 @@ import { STATUTS, piecesByCategorie, piecesAttendues, pretCouleur, type Dossier 
 import { useStore, getO365EmailFor } from '@/stores/useStore'
 import { useAuth, usePermissions } from '@/auth/AuthContext'
 import { eur, pct, dateFr, dateTimeFr, cn, initials } from '@/lib/utils'
+import { confirmDialog } from '@/lib/dialog'
 import { computeScoreConfiance } from '@/lib/score'
 import { saveFile, FILTERS } from '@/lib/saveFile'
 import * as mailGraph from '@/o365/mail'
@@ -1221,16 +1222,17 @@ function TabPieces({ dossier }: { dossier: Dossier }) {
     void load(dossier.oneDriveFolderId, dossier.oneDriveDriveId)
   }, [dossier.oneDriveFolderId, dossier.oneDriveDriveId, o365Email, load])
 
-  const handleSelectFolder = (sel: OneDriveSelection) => {
+  const handleSelectFolder = async (sel: OneDriveSelection) => {
     // Garde-fou : avertir si le même folder OneDrive est déjà lié à un autre
     // dossier de courtage — sinon on voit les pièces d'autres clients dans
     // l'onglet Pièces (cause classique de confusion).
     const conflict = allDossiers.find((d) => d.id !== dossier.id && d.oneDriveFolderId === sel.id)
     if (conflict) {
-      const ok = confirm(
+      const ok = await confirmDialog(
         `⚠️ Ce dossier OneDrive est déjà lié au dossier ${conflict.ref} (${conflict.clientNom}).\n\n` +
         `Si tu confirmes, les pièces apparaîtront dans les DEUX dossiers Apolline.\n\n` +
         `Continuer quand même ?`,
+        { title: 'Conflit OneDrive', kind: 'warning' },
       )
       if (!ok) return
     }
@@ -1670,7 +1672,7 @@ function TabFactures({ dossierId }: { dossierId: string }) {
   }, [list])
 
   const onRegler = async (f: Facture) => {
-    if (!confirm(`Marquer ${f.ref} comme réglée pour ${eur2(f.montantTtc)} ?`)) return
+    if (!await confirmDialog(`Marquer ${f.ref} comme réglée pour ${eur2(f.montantTtc)} ?`, { title: 'Régler la facture', kind: 'info' })) return
     try {
       await facturesApi.regler(f.id, { regleeLe: new Date().toISOString() })
       toast.success(`${f.ref} réglée`)
@@ -1679,17 +1681,18 @@ function TabFactures({ dossierId }: { dossierId: string }) {
   }
 
   const onAvoir = async (f: Facture) => {
-    const motif = prompt(`Avoir sur ${f.ref} ? Motif :`)
-    if (!motif) return
+    // TODO: remplacer prompt() (cassé dans Tauri) par une vraie modale input.
+    // Pour l'instant on demande confirmation simple — le motif sera géré manuel.
+    if (!await confirmDialog(`Créer un avoir sur la facture ${f.ref} ?`, { title: 'Avoir', kind: 'warning' })) return
     try {
-      await facturesApi.avoir(f.id, { motif })
-      toast.success(`Avoir créé`)
+      await facturesApi.avoir(f.id, { motif: 'À préciser' })
+      toast.success(`Avoir créé`, { description: 'Tu peux modifier le motif en ouvrant l\'avoir' })
       void reload()
     } catch (e) { toast.error('Erreur', { description: e instanceof Error ? e.message : String(e) }) }
   }
 
   const onAnnuler = async (f: Facture) => {
-    if (!confirm(`Annuler ${f.ref} ? (statut → annulée)`)) return
+    if (!await confirmDialog(`Annuler ${f.ref} ? (statut → annulée)`, { title: 'Annuler la facture', kind: 'warning' })) return
     try {
       await facturesApi.cancel(f.id)
       toast.success(`${f.ref} annulée`)
