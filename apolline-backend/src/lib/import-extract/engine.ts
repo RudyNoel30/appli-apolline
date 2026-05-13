@@ -17,11 +17,17 @@ import { IMPORT_EXTRACT_PROMPT } from './prompt.js'
 const apiKey = process.env.ANTHROPIC_API_KEY
 const client = apiKey ? new Anthropic({ apiKey }) : null
 
+// Import = tâche CRITIQUE qui pré-remplit un dossier complet (état civil + revenus +
+// projet + alertes des 2 emprunteurs). Une omission silencieuse côté Claude
+// (emprunteur2 mal rempli, patrimoine ignoré…) génère du retravail manuel coûteux.
+// Donc on utilise Opus 4.7 par défaut — qualité maximale pour un coût ~0.30 €/import
+// (vs Sonnet 4.7 qui retourne souvent un emprunteur2 incomplet).
 const IMPORT_MODEL = process.env.ANTHROPIC_MODEL_IMPORT_EXTRACT
-  ?? process.env.ANTHROPIC_MODEL_SONNET
-  ?? 'claude-sonnet-4-7-20251215'
+  ?? process.env.ANTHROPIC_MODEL_OPUS
+  ?? 'claude-opus-4-7-20251215'
 
-const PRICING = { input: 2.85, output: 14.25 }
+// Tarifs Opus 4.7 en EUR/1M tokens (input ~15$/M output ~75$/M, conversion 0.95)
+const PRICING = { input: 14.25, output: 71.25 }
 
 export type ImportExtractResult = {
   status: 'completed' | 'failed'
@@ -109,14 +115,16 @@ export async function importExtract(
   }
 
   try {
-    // 1. Parse via Claude
+    // 1. Parse via Claude (Opus 4.7 = qualité maximum pour cette tâche critique)
+    // max_tokens élevé (16k) car le JSON peut être conséquent quand les 2
+    // emprunteurs sont remplis + crédits + patrimoine.
     const res = await client.messages.create({
       model: IMPORT_MODEL,
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: IMPORT_EXTRACT_PROMPT,
       messages: [{
         role: 'user',
-        content: `Voici le contenu intégral du fichier AA summary extract.txt :\n\n\`\`\`\n${extractText}\n\`\`\`\n\nProduis le JSON conforme au schéma Apolline.`,
+        content: `Voici le contenu intégral du fichier AA summary extract.txt :\n\n\`\`\`\n${extractText}\n\`\`\`\n\nProduis le JSON COMPLET conforme au schéma Apolline. RAPPEL CRITIQUE : si §1.2 EMPRUNTEUR 2 est présent, tu DOIS remplir TOUS les champs disponibles d'emprunteur2 (nom, prénom, naissance, profession, employeur, salaire net imposable médian, RFR, ancienneté…) — pas juste le nom.`,
       }],
     })
 
@@ -183,7 +191,10 @@ export async function importExtract(
       return { status: 'failed', error: 'Échec création client', usage }
     }
 
-    // 4. Insère dossier
+    // 4. Insère dossier — complet, tous les champs du schema retransmis
+    const creditsExistants = Array.isArray(dossierData.creditsExistants) ? dossierData.creditsExistants : []
+    const patrimoine = Array.isArray(dossierData.patrimoine) ? dossierData.patrimoine : []
+
     const [newDossier] = await db.insert(schema.dossiers).values({
       ref,
       legacyId,
@@ -196,20 +207,32 @@ export async function importExtract(
       montantPret: Number(dossierData.montantPret ?? 0),
       apport: Number(dossierData.apport ?? 0),
       dureeMois: Number(dossierData.dureeMois ?? 240),
-      // Champs Cifacil enrichis
+      // Coûts opération
       coutLogement: Number(dossierData.coutLogement ?? 0),
       coutTerrain: Number(dossierData.coutTerrain ?? 0),
       coutTravaux: Number(dossierData.coutTravaux ?? 0),
+      coutMobilier: Number(dossierData.coutMobilier ?? 0),
+      coutViabilisation: Number(dossierData.coutViabilisation ?? 0),
       fraisNotaire: Number(dossierData.fraisNotaire ?? 0),
       fraisAgence: Number(dossierData.fraisAgence ?? 0),
+      fraisEtablissement: Number(dossierData.fraisEtablissement ?? 0),
+      fraisExpertise: Number(dossierData.fraisExpertise ?? 0),
+      rachatCreditCout: Number(dossierData.rachatCreditCout ?? 0),
+      // Revenus / charges ménage
       rfMenage: Number(dossierData.rfMenage ?? 0),
       rfReferenceN1: Number(dossierData.rfReferenceN1 ?? 0),
       rfReferenceN2: Number(dossierData.rfReferenceN2 ?? 0),
       allocFamiliales: Number(dossierData.allocFamiliales ?? 0),
+      aplAlActuelle: Number(dossierData.aplAlActuelle ?? 0),
       epargneMenage: Number(dossierData.epargneMenage ?? 0),
       loyerMenage: Number(dossierData.loyerMenage ?? 0),
+      autresDepensesMenage: Number(dossierData.autresDepensesMenage ?? 0),
       empruntsLocatifsMenage: Number(dossierData.empruntsLocatifsMenage ?? 0),
       empruntsNonLocatifsMenage: Number(dossierData.empruntsNonLocatifsMenage ?? 0),
+      // Patrimoine / crédits existants (jsonb arrays)
+      creditsExistants: creditsExistants as never,
+      patrimoine: patrimoine as never,
+      // Caractérisation projet
       typeAchat: dossierData.typeAchat ? String(dossierData.typeAchat) : null,
       destination: dossierData.destination ? String(dossierData.destination) : null,
       typeLogement: dossierData.typeLogement ? String(dossierData.typeLogement) : null,
