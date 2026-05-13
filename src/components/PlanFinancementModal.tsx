@@ -10,6 +10,7 @@
  *  - Éditer manuellement chaque palier (V2 — pour l'instant: lecture seule)
  */
 import { useMemo, useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Sparkles, RefreshCw, FileText, Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Pret, Dossier } from '@/data/mock'
@@ -164,7 +165,7 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex animate-fade-in">
       <div className="absolute inset-0 bg-navy-950/70 backdrop-blur-sm" onClick={onClose} />
       <div
@@ -394,7 +395,8 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
           <button onClick={onClose} className="btn-ghost">Fermer</button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

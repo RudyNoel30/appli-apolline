@@ -18,6 +18,7 @@
  * KPIs live dans sidebar bas : mensualité HA, mensualité totale, TAEG, coût total.
  */
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Trash2, Save, Plus, X, Tag, Building2, Coins, CalendarClock, ShieldCheck,
   FileSignature, StickyNote, TrendingUp, Award,
@@ -319,7 +320,11 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
 
   if (!open) return null
 
-  return (
+  // Portal vers document.body : la modale s'échappe de la hiérarchie React et
+  // n'est donc plus containée par les transforms des ancêtres (.page, .page > *,
+  // .tab-content, etc.). Garantie d'occuper TOUT le viewport en plein écran,
+  // peu importe le contexte de rendu.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-stretch animate-fade-in">
       <div className="absolute inset-0 bg-navy-950/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -443,7 +448,8 @@ export default function PretEditor({ open, pret, dossierId, defaultRang = 0, ban
           </footer>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

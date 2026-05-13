@@ -3,6 +3,7 @@
  * Modale plein-écran avec navigation latérale en 6 sections.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X, Save, User2, Briefcase, Wallet, Banknote, Building2, Bookmark,
   Plus, Trash2, AlertCircle, Check,
@@ -287,7 +288,7 @@ export default function DossierEditor({
     onSave(dossierPatch, clientPatch)
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-stretch animate-fade-in">
       <div className="absolute inset-0 bg-navy-950/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -398,7 +399,8 @@ export default function DossierEditor({
           </footer>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

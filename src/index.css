@@ -408,13 +408,28 @@ html.theme-sombre ::-webkit-scrollbar-thumb { background: #334155; border-color:
    Animations utilitaires premium — palette unifiée
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Tabs : transition douce du contenu quand on change d'onglet ─── */
+/* ─── Tabs : transition douce du contenu quand on change d'onglet ───
+ *
+ * ⚠ ATTENTION : ON N'UTILISE QUE `opacity` PAS DE `transform` !
+ *
+ * Pourquoi : avec `animation-fill-mode: both`, n'importe quel `transform`
+ * persiste à la fin de l'animation. Or en CSS, un `transform` non-none crée
+ * un nouveau containing block pour les `position: fixed` enfants — ce qui
+ * casse toutes les modales (PretEditor, PlanFinancementModal, etc.) rendues
+ * dans cette zone : elles s'incrustent dans la `.tab-content` au lieu d'aller
+ * en plein écran.
+ *
+ * Référence : https://developer.mozilla.org/en-US/docs/Web/CSS/position
+ *   "A fixed positioned element creates a new containing block for its
+ *    children unless its containing block is established by an ancestor
+ *    that has a transform, perspective, or filter property"
+ */
 .tab-content {
-  animation: tab-content-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: tab-content-enter 280ms ease-out both;
 }
 @keyframes tab-content-enter {
-  0%   { opacity: 0; transform: translateY(4px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 /* ─── Indicateur d'onglet actif qui glisse (pour tabs avec underline) ─── */
