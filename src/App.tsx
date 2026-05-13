@@ -17,6 +17,7 @@ import Commissions from './pages/Commissions'
 import Facturation from './pages/Facturation'
 import Messagerie from './pages/Messagerie'
 import Parametres from './pages/Parametres'
+import ImportOneDrive from './pages/ImportOneDrive'
 import Login from './pages/Login'
 import ErrorBoundary from './components/ErrorBoundary'
 import CommandPalette from './components/CommandPalette'
@@ -547,6 +548,7 @@ export default function App() {
                   <Route path="/commissions" element={<Commissions />} />
                   <Route path="/facturation" element={<Facturation />} />
                   <Route path="/parametres" element={<Parametres />} />
+                  <Route path="/import-onedrive" element={<ImportOneDrive />} />
                   <Route path="/login" element={<Navigate to="/" replace />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

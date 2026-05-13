@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, UserPlus, Users, FolderKanban, Calculator,
   MapPin, FolderOpen, CalendarDays, Coins, Mail, Settings,
-  Pin, PinOff, Sparkles, Receipt,
+  Pin, PinOff, Sparkles, Receipt, CloudDownload,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/stores/useStore'
@@ -16,6 +16,7 @@ const nav = [
   { to: '/prospects', label: 'Prospects', icon: UserPlus },
   { to: '/clients', label: 'Clients', icon: Users },
   { to: '/dossiers', label: 'Dossiers', icon: FolderKanban },
+  { to: '/import-onedrive', label: 'Importer OneDrive', icon: CloudDownload },
   { to: '/simulation', label: 'Simulation', icon: Calculator },
   { to: '/dvf', label: 'Étude DVF', icon: MapPin },
   { to: '/pieces', label: 'Pièces', icon: FolderOpen },

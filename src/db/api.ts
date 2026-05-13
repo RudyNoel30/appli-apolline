@@ -423,6 +423,30 @@ export const banquesScoring = {
   },
 }
 
+/* ────────────────── Import d'un AA summary extract.txt depuis OneDrive ────────────────── */
+
+export type ImportExtractResult = {
+  ok: boolean
+  dossierId: string
+  clientId: string
+  ref: string
+  legacyId: string | null
+  fieldsImported: number
+  usage: { inputTokens: number; outputTokens: number; estimatedCostEur: number }
+}
+
+export const importExtractApi = {
+  /**
+   * Importe un dossier dans Apolline depuis le contenu texte d'un fichier
+   * AA summary extract.txt (généré par le skill /dossier-extract sur OneDrive).
+   *
+   * Crée client (prospect) + dossier en BDD. ~5 secondes par import, ~0.05 €.
+   */
+  async run(extractText: string, sourceFolderPath?: string): Promise<ImportExtractResult> {
+    return request('POST', '/api/dossiers/import-extract', { extractText, sourceFolderPath })
+  },
+}
+
 /* ────────────────── AI / Anthropic Claude ────────────────── */
 
 export type AiSkillInfo = { name: string; tier: 'sonnet' | 'haiku' | 'opus'; model: string; title: string; description: string }
