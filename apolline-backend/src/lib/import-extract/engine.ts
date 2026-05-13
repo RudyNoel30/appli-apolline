@@ -232,6 +232,8 @@ export async function importExtract(
       // Patrimoine / crédits existants (jsonb arrays)
       creditsExistants: creditsExistants as never,
       patrimoine: patrimoine as never,
+      // Caractéristiques détaillées du bien (§5 de l'extract)
+      bienDetails: (dossierData.bienDetails ?? {}) as never,
       // Caractérisation projet
       typeAchat: dossierData.typeAchat ? String(dossierData.typeAchat) : null,
       destination: dossierData.destination ? String(dossierData.destination) : null,

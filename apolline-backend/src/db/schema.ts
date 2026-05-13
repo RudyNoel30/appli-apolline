@@ -214,6 +214,11 @@ export const dossiers = pgTable('dossiers', {
   fraisNotaire: integer('frais_notaire'),
   rachatCreditCout: integer('rachat_credit_cout'),
 
+  // Caractéristiques détaillées du bien (extraites du dossier-extract §5)
+  // jsonb : surfaceHabitable, surfaceTerrain, anneeConstruction, dpe,
+  // ges, consoEnergie, coutEnergieAnnuel, auditEnergetique, etc.
+  bienDetails: jsonb('bien_details').default({}),
+
   commercialId: text('commercial_id').references(() => collaborateurs.id, { onDelete: 'set null' }),
   backOfficeId: text('back_office_id').references(() => collaborateurs.id, { onDelete: 'set null' }),
   apporteurNom: text('apporteur_nom'),

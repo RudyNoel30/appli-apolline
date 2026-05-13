@@ -315,6 +315,29 @@ export type Dossier = {
   fraisNotaire?: number
   rachatCreditCout?: number
 
+  /** Caractéristiques détaillées du bien (extraites par dossier-extract §5) — jsonb */
+  bienDetails?: {
+    adresseBien?: string
+    vendeur?: string
+    agenceVente?: string
+    notaire?: string
+    surfaceHabitable?: number
+    surfaceTerrain?: number
+    nbPieces?: number
+    anneeConstruction?: number
+    typeBien?: string
+    dpeClasse?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | ''
+    dpeConsoKwhM2An?: number
+    gesClasse?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | ''
+    gesCo2kgM2An?: number
+    coutEnergieAnnuelMin?: number
+    coutEnergieAnnuelMax?: number
+    auditEnergetiqueDispo?: boolean
+    scenarioRenovation?: string
+    diagsManquants?: string[]
+    originePropriete?: string
+  }
+
   // Métadonnées Cifacil
   commercialId?: string
   backOfficeId?: string

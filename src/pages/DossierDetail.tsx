@@ -1024,7 +1024,46 @@ function PatrimoineKpi({ label, value, hint, accent = 'navy' }: {
   )
 }
 
+/** Affiche un montant ou "Non renseigné" en italique si à 0 */
+function MontantField({ label, value }: { label: string; value: number }) {
+  const isEmpty = !value || value === 0
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">{label}</span>
+      {isEmpty ? (
+        <span className="text-sm italic text-navy-300">Non renseigné</span>
+      ) : (
+        <span className="text-sm font-mono text-navy-900">{eur(value)}</span>
+      )}
+    </div>
+  )
+}
+
+/** Mini-badge pour la classe DPE/GES (couleur officielle) */
+function DpeBadge({ classe, kind }: { classe?: string; kind: 'dpe' | 'ges' }) {
+  if (!classe) return <span className="text-xs italic text-navy-300">—</span>
+  const colors: Record<string, string> = {
+    A: 'bg-emerald-600 text-white',
+    B: 'bg-lime-500 text-white',
+    C: 'bg-yellow-400 text-navy-900',
+    D: 'bg-amber-500 text-white',
+    E: 'bg-orange-500 text-white',
+    F: 'bg-red-600 text-white',
+    G: 'bg-red-800 text-white',
+  }
+  return (
+    <span className={cn(
+      'inline-flex items-center justify-center h-7 w-7 rounded font-bold text-sm shadow-sm',
+      colors[classe] ?? 'bg-navy-200 text-navy-700',
+    )} title={`Classe ${kind.toUpperCase()} : ${classe}`}>
+      {classe}
+    </span>
+  )
+}
+
 function TabProjet({ dossier }: { dossier: Dossier }) {
+  const bien = dossier.bienDetails ?? {}
+
   const coutTotal =
     (dossier.coutLogement ?? dossier.montantBien ?? 0)
     + (dossier.coutTerrain ?? 0)
@@ -1037,9 +1076,22 @@ function TabProjet({ dossier }: { dossier: Dossier }) {
     + (dossier.fraisExpertise ?? 0)
     + (dossier.rachatCreditCout ?? 0)
 
+  const isPrixManquant = (dossier.montantBien ?? 0) === 0 && (dossier.coutLogement ?? 0) === 0
+
   return (
     <>
-      <Section title="Caractéristiques du bien">
+      {/* Bandeau d'alerte si prix manquant — fréquent en R0 */}
+      {isPrixManquant && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-5 text-xs text-amber-900 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" />
+          <div>
+            <strong className="text-amber-950">Prix de vente non renseigné</strong>
+            <div className="mt-0.5">L'extract n'a pas pu déterminer le prix du bien (généralement non communiqué avant R1 ou compromis). Saisis-le manuellement depuis le bouton « Modifier » du dossier pour activer les calculs de plan de financement.</div>
+          </div>
+        </div>
+      )}
+
+      <Section title="Caractéristiques du projet">
         <div className="grid grid-cols-4 gap-5">
           <Field label="Type de projet" value={dossier.typeProjet || '—'} />
           <Field label="Type d'achat" value={dossier.typeAchat || '—'} />
@@ -1052,25 +1104,95 @@ function TabProjet({ dossier }: { dossier: Dossier }) {
         </div>
       </Section>
 
+      {/* ─── Bien immobilier détaillé (depuis §5.1 de l'extract) ─── */}
+      {(bien.adresseBien || bien.surfaceHabitable || bien.anneeConstruction || bien.vendeur) && (
+        <Section title="Le bien">
+          <div className="grid grid-cols-4 gap-5 mb-4">
+            <Field label="Adresse" value={bien.adresseBien || '—'} />
+            <Field label="Type" value={bien.typeBien || '—'} />
+            <Field label="Surface habitable" value={bien.surfaceHabitable ? `${bien.surfaceHabitable} m²` : '—'} />
+            <Field label="Surface terrain" value={bien.surfaceTerrain ? `${bien.surfaceTerrain} m²` : '—'} />
+            <Field label="Nb pièces" value={bien.nbPieces ? String(bien.nbPieces) : '—'} />
+            <Field label="Année construction" value={bien.anneeConstruction ? String(bien.anneeConstruction) : '—'} />
+            <Field label="Vendeur" value={bien.vendeur || '—'} />
+            <Field label="Agence / Apporteur" value={bien.agenceVente || '—'} />
+            {bien.notaire && <Field label="Notaire" value={bien.notaire} />}
+            {bien.originePropriete && <Field label="Origine de propriété" value={bien.originePropriete} />}
+          </div>
+        </Section>
+      )}
+
+      {/* ─── Performance énergétique (depuis §5.2 et §5.3 de l'extract) ─── */}
+      {(bien.dpeClasse || bien.gesClasse || bien.auditEnergetiqueDispo) && (
+        <Section title="Performance énergétique">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="rounded-lg bg-ivory border border-navy-100 p-4">
+              <div className="text-xs uppercase tracking-wider text-navy-500 font-semibold mb-3">DPE — Étiquette énergie</div>
+              <div className="flex items-center gap-3">
+                <DpeBadge classe={bien.dpeClasse} kind="dpe" />
+                <div>
+                  <div className="text-sm font-medium text-navy-900">
+                    {bien.dpeConsoKwhM2An ? `${bien.dpeConsoKwhM2An} kWh/m²/an` : 'Conso non renseignée'}
+                  </div>
+                  {(bien.coutEnergieAnnuelMin || bien.coutEnergieAnnuelMax) && (
+                    <div className="text-[11px] text-navy-500 mt-0.5">
+                      Coût énergie : {eur(bien.coutEnergieAnnuelMin ?? 0)} à {eur(bien.coutEnergieAnnuelMax ?? 0)} /an
+                    </div>
+                  )}
+                </div>
+              </div>
+              {bien.dpeClasse === 'F' || bien.dpeClasse === 'G' ? (
+                <div className="mt-3 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                  ⚠ Passoire thermique — interdiction location {bien.dpeClasse === 'G' ? '01/01/2025' : '01/01/2028'}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg bg-ivory border border-navy-100 p-4">
+              <div className="text-xs uppercase tracking-wider text-navy-500 font-semibold mb-3">GES — Émissions CO₂</div>
+              <div className="flex items-center gap-3">
+                <DpeBadge classe={bien.gesClasse} kind="ges" />
+                <div className="text-sm font-medium text-navy-900">
+                  {bien.gesCo2kgM2An ? `${bien.gesCo2kgM2An} kg CO₂/m²/an` : 'GES non renseigné'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {bien.auditEnergetiqueDispo && (
+            <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900">
+              <strong>✓ Audit énergétique disponible</strong>
+              {bien.scenarioRenovation && <div className="mt-1">{bien.scenarioRenovation}</div>}
+            </div>
+          )}
+
+          {bien.diagsManquants && bien.diagsManquants.length > 0 && (
+            <div className="mt-3 text-xs text-navy-700">
+              <strong className="text-amber-800">Diagnostics manquants :</strong>{' '}
+              {bien.diagsManquants.join(', ')}
+            </div>
+          )}
+        </Section>
+      )}
+
       <Section title="Coûts de l'opération">
         <div className="grid grid-cols-4 gap-5">
-          <Field label="Prix FAI / bien" value={eur(dossier.montantBien ?? 0)} />
-          <Field label="Coût logement" value={eur(dossier.coutLogement ?? 0)} />
-          <Field label="Coût terrain" value={eur(dossier.coutTerrain ?? 0)} />
-          <Field label="Coût travaux" value={eur(dossier.coutTravaux ?? 0)} />
-          <Field label="Coût mobilier" value={eur(dossier.coutMobilier ?? 0)} />
-          <Field label="Viabilisation" value={eur(dossier.coutViabilisation ?? 0)} />
-          <Field label="Rachat crédit" value={eur(dossier.rachatCreditCout ?? 0)} />
-          <div /> {/* placeholder grille */}
+          <MontantField label="Prix FAI / bien" value={dossier.montantBien ?? 0} />
+          <MontantField label="Coût logement" value={dossier.coutLogement ?? 0} />
+          <MontantField label="Coût terrain" value={dossier.coutTerrain ?? 0} />
+          <MontantField label="Coût travaux" value={dossier.coutTravaux ?? 0} />
+          <MontantField label="Coût mobilier" value={dossier.coutMobilier ?? 0} />
+          <MontantField label="Viabilisation" value={dossier.coutViabilisation ?? 0} />
+          <MontantField label="Rachat crédit" value={dossier.rachatCreditCout ?? 0} />
         </div>
       </Section>
 
       <Section title="Frais annexes">
         <div className="grid grid-cols-4 gap-5">
-          <Field label="Frais notaire" value={eur(dossier.fraisNotaire ?? 0)} />
-          <Field label="Frais agence" value={eur(dossier.fraisAgence ?? 0)} />
-          <Field label="Frais établissement" value={eur(dossier.fraisEtablissement ?? 0)} />
-          <Field label="Frais expertise" value={eur(dossier.fraisExpertise ?? 0)} />
+          <MontantField label="Frais notaire" value={dossier.fraisNotaire ?? 0} />
+          <MontantField label="Frais agence" value={dossier.fraisAgence ?? 0} />
+          <MontantField label="Frais établissement" value={dossier.fraisEtablissement ?? 0} />
+          <MontantField label="Frais expertise" value={dossier.fraisExpertise ?? 0} />
         </div>
       </Section>
 
@@ -1078,7 +1200,11 @@ function TabProjet({ dossier }: { dossier: Dossier }) {
         <div className="grid grid-cols-3 gap-5">
           <div className="rounded-lg bg-ivory border border-navy-100 p-3">
             <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Coût total opération</div>
-            <div className="font-serif text-2xl font-bold text-navy-900 tabular-nums mt-1">{eur(coutTotal)}</div>
+            {coutTotal > 0 ? (
+              <div className="font-serif text-2xl font-bold text-navy-900 tabular-nums mt-1">{eur(coutTotal)}</div>
+            ) : (
+              <div className="font-serif text-base italic text-navy-300 mt-1">Non calculable</div>
+            )}
           </div>
           <div className="rounded-lg bg-ivory border border-navy-100 p-3">
             <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Apport personnel</div>
@@ -1086,7 +1212,11 @@ function TabProjet({ dossier }: { dossier: Dossier }) {
           </div>
           <div className="rounded-lg bg-ivory border border-navy-100 p-3">
             <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Reste à financer</div>
-            <div className="font-serif text-2xl font-bold text-navy-900 tabular-nums mt-1">{eur(Math.max(0, coutTotal - (dossier.apport ?? 0)))}</div>
+            {coutTotal > 0 ? (
+              <div className="font-serif text-2xl font-bold text-navy-900 tabular-nums mt-1">{eur(Math.max(0, coutTotal - (dossier.apport ?? 0)))}</div>
+            ) : (
+              <div className="font-serif text-base italic text-navy-300 mt-1">À calculer</div>
+            )}
           </div>
         </div>
       </Section>

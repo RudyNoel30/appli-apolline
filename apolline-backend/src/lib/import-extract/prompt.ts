@@ -102,6 +102,28 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
       }
     ],
 
+    "bienDetails": {
+      "adresseBien": "string ou '' — adresse complète du bien à acquérir (ex: '4 rue d'Amont, 39290 CHEVIGNY')",
+      "vendeur": "string ou '' — nom du vendeur (ex: 'Daniel CAMBAZARD')",
+      "agenceVente": "string ou '' — nom de l'agence ou prescripteur (ex: 'ANGEL IMMO')",
+      "notaire": "string ou ''",
+      "surfaceHabitable": number,
+      "surfaceTerrain": number,
+      "nbPieces": number,
+      "anneeConstruction": number,
+      "typeBien": "string — ex: 'Maison individuelle', 'Appartement T3'",
+      "dpeClasse": "A|B|C|D|E|F|G ou ''",
+      "dpeConsoKwhM2An": number,
+      "gesClasse": "A|B|C|D|E|F|G ou ''",
+      "gesCo2kgM2An": number,
+      "coutEnergieAnnuelMin": number,
+      "coutEnergieAnnuelMax": number,
+      "auditEnergetiqueDispo": boolean,
+      "scenarioRenovation": "string — synthèse en 1-2 phrases si l'audit propose des scénarios",
+      "diagsManquants": ["string"],
+      "originePropriete": "string — ex: 'Héritage probable', 'Acquisition 1985'"
+    },
+
     "alertes": ["string", "..."],
     "legacyId": "string ou null"
   },
@@ -218,7 +240,29 @@ RÈGLES D'EXTRACTION PRÉCISES :
    - "Logé à titre gratuit" → "Logé à titre gratuit"
    - Si non déterminé → "Locataire" (hypothèse la plus fréquente)
 
-8. **Bien immobilier** (§5.1) — valeurs autorisées EXACTES :
+8bis. **bienDetails** (§5.1, §5.2, §5.3) — caractéristiques physiques et énergétiques DU BIEN À ACQUÉRIR :
+   - **adresseBien** : adresse complète extraite de §5.1 "Adresse" (ex: "4 rue d'Amont, 39290 CHEVIGNY")
+   - **vendeur** : nom du vendeur depuis §5.1 (ex: "Daniel CAMBAZARD")
+   - **agenceVente** : agence/prescripteur depuis l'en-tête "Origine" ou §5.1
+   - **notaire** : si renseigné
+   - **surfaceHabitable** : nombre depuis §5.1 ou §5.2 (ex: "110 m²" → 110)
+   - **surfaceTerrain** : nombre, 0 si non communiquée
+   - **nbPieces** : 0 si non précisé
+   - **anneeConstruction** : nombre (ex: 1900)
+   - **typeBien** : depuis §5.1 "Type" (ex: "Maison individuelle")
+   - **dpeClasse** : classe énergétique A à G depuis §5.2 (ex: "F")
+   - **dpeConsoKwhM2An** : depuis §5.2 (ex: "351 kWh/m²/an" → 351)
+   - **gesClasse** : classe émissions GES A à G depuis §5.2
+   - **gesCo2kgM2An** : depuis §5.2 (ex: "71 kg CO₂/m²/an" → 71)
+   - **coutEnergieAnnuelMin** / **coutEnergieAnnuelMax** : fourchette depuis §5.2 (ex: "3 797 € à 5 137 €/an" → min=3797, max=5137)
+   - **auditEnergetiqueDispo** : true si §5.3 AUDIT ÉNERGÉTIQUE rempli
+   - **scenarioRenovation** : synthèse 1-2 phrases si l'audit propose des scénarios (ex: "Audit avec 2 scénarios — rénovation en une fois ou par étapes, chiffrages à demander")
+   - **diagsManquants** : array des diagnostics manquants depuis §5.4 (ex: ["ERP", "Termites", "Bornage"])
+   - **originePropriete** : si renseigné (ex: "Héritage probable vu indivision")
+
+   ⚠ Si une donnée n'est pas dans l'extract → laisse à 0 (nombres) ou "" (strings). N'invente JAMAIS.
+
+9. **Bien immobilier** (§5.1) — valeurs autorisées EXACTES pour les champs du dossier :
    - villeBien : ville exacte en majuscule (ex: "CHEVIGNY")
    - typeProjet : string libre (ex: "Acquisition RP", "Investissement locatif")
    - typeAchat : "Ancien" pour maison/appartement existant, "Neuf" pour neuf, "VEFA" si VEFA, "Construction" si construction neuve, "Rachat" si rachat de crédit, "Travaux" si financement travaux
