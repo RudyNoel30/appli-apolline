@@ -35,6 +35,173 @@ export function calcMensualiteAssurance(montant: number, tauxAssurancePct: numbe
   return Math.round((montant * (tauxAssurancePct / 100)) / 12)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FRAIS DE NOTAIRE — calcul officiel français (Code de commerce art. R 444-x)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 4 composantes :
+//   1. Émoluments proportionnels du notaire (HT, barème dégressif 4 tranches)
+//      + TVA 20 % + remise loi Macron optionnelle (jusqu'à 20 % au-delà de 100k€)
+//   2. Droits de mutation à titre onéreux (DMTO) :
+//      - Ancien : 5,80 % (standard) ou 4,50 % dans 4 départements (Indre, Isère,
+//        Mayotte, Morbihan — ces dépts n'ont pas relevé le taux en 2014)
+//      - Neuf / VEFA : 0,715 % (taxe de publicité foncière, TVA déjà incluse
+//        dans le prix promoteur)
+//   3. Contribution de sécurité immobilière (CSI) : 0,10 % du prix
+//   4. Débours et formalités : forfait ~1 200 € (cadastre, urbanisme, état civil…)
+//
+// Ratio total typique :
+//   - Ancien départements standard : ~7,5 à 8 % du prix
+//   - Ancien départements à 4,5 % : ~6 % du prix
+//   - Neuf / VEFA : ~2,5 à 3 % du prix
+//
+// Source : Code de commerce R 444-x (barème reconduit 2026-2028 à l'identique
+// du 2021-2022), Conseil supérieur du notariat, ANIL.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type NatureBienNotaire = 'ancien' | 'neuf' | 'vefa' | 'terrain'
+
+/** Départements où le taux DMTO ancien est réduit à 4,50 % (non hausse 2014) */
+const DEPARTEMENTS_DMTO_REDUIT = new Set(['36', '38', '976', '56'])
+//                                 Indre, Isère, Mayotte, Morbihan
+
+/**
+ * Émoluments PROPORTIONNELS du notaire (HT) selon le barème national pour
+ * mutation à titre onéreux (vente immobilière). 4 tranches dégressives.
+ *
+ * Source : Code de commerce art. A 444-91 — barème actes de vente.
+ */
+function emolumentsProportionnels(prix: number): number {
+  if (prix <= 0) return 0
+  const t1 = Math.min(prix, 6_500) * 0.03870
+  const t2 = Math.max(0, Math.min(prix, 17_000) - 6_500) * 0.01596
+  const t3 = Math.max(0, Math.min(prix, 60_000) - 17_000) * 0.01064
+  const t4 = Math.max(0, prix - 60_000) * 0.00799
+  return t1 + t2 + t3 + t4
+}
+
+export type FraisNotaireOptions = {
+  /** Département du bien (code INSEE 2 ou 3 chiffres). Utilisé pour DMTO ancien
+   *  (4 départements à 4,5 % : 36, 38, 976, 56). Défaut : 5,80 %. */
+  departement?: string
+  /** Appliquer la remise loi Macron (20 % sur la part émoluments > 100 000 €).
+   *  Faculté du notaire — par défaut on ne l'applique PAS pour rester conservateur
+   *  côté présentation client. */
+  remiseMacron?: boolean
+}
+
+export type FraisNotaireDetail = {
+  /** Émoluments du notaire (TTC, après remise Macron éventuelle) */
+  emoluments: number
+  /** Droits de mutation à titre onéreux (DMTO) */
+  dmto: number
+  /** Contribution de sécurité immobilière */
+  csi: number
+  /** Débours et formalités */
+  debours: number
+  /** Total = somme des 4 composantes */
+  total: number
+  /** Taux DMTO appliqué (0,058 ou 0,045 ou 0,00715) — pour transparence affichage */
+  tauxDmtoAppli: number
+  /** Pourcentage total / prix d'achat (pour comparaison rapide) */
+  ratioPrix: number
+}
+
+/**
+ * Calcule les frais de notaire détaillés (composante par composante).
+ *
+ * @param prix Prix d'acquisition du bien (assiette = montant brut hors travaux/mobilier)
+ * @param nature 'ancien' | 'neuf' | 'vefa' | 'terrain'
+ * @param opts Options (département pour DMTO réduit, remise Macron)
+ */
+export function calcFraisNotaireDetail(
+  prix: number,
+  nature: NatureBienNotaire,
+  opts: FraisNotaireOptions = {},
+): FraisNotaireDetail {
+  if (prix <= 0) {
+    return {
+      emoluments: 0, dmto: 0, csi: 0, debours: 0, total: 0,
+      tauxDmtoAppli: 0, ratioPrix: 0,
+    }
+  }
+
+  // 1. Émoluments du notaire (HT) + TVA 20 %
+  let emolumentsHT = emolumentsProportionnels(prix)
+
+  // Remise loi Macron : -20 % sur la part au-delà de 100 000 € (taux 0,799 %)
+  // → équivalent à appliquer 0,799 × 0,80 = 0,6392 % sur cette tranche
+  if (opts.remiseMacron && prix > 100_000) {
+    const partAuDessus100k = prix - 100_000
+    const emolumentsT4Sans = partAuDessus100k * 0.00799
+    const emolumentsT4Avec = partAuDessus100k * 0.00799 * 0.80  // -20 %
+    emolumentsHT = emolumentsHT - emolumentsT4Sans + emolumentsT4Avec
+  }
+  const emoluments = emolumentsHT * 1.20  // TVA 20 %
+
+  // 2. DMTO selon nature + département
+  let tauxDmtoAppli: number
+  if (nature === 'neuf' || nature === 'vefa') {
+    tauxDmtoAppli = 0.00715  // taxe publicité foncière (TVA déjà payée)
+  } else {
+    // 'ancien' ou 'terrain' : DMTO 5,80 % standard, ou 4,50 % dans 4 départements
+    const dep = opts.departement?.trim() ?? ''
+    tauxDmtoAppli = DEPARTEMENTS_DMTO_REDUIT.has(dep) ? 0.0450 : 0.0580
+  }
+  const dmto = prix * tauxDmtoAppli
+
+  // 3. CSI — 0,10 % du prix
+  const csi = prix * 0.0010
+
+  // 4. Débours et formalités — forfait
+  const debours = 1_200
+
+  const total = Math.round(emoluments + dmto + csi + debours)
+  return {
+    emoluments: Math.round(emoluments),
+    dmto: Math.round(dmto),
+    csi: Math.round(csi),
+    debours,
+    total,
+    tauxDmtoAppli,
+    ratioPrix: total / prix,
+  }
+}
+
+/**
+ * Wrapper simple : retourne juste le total en €.
+ * Pour la décomposition (émoluments/DMTO/CSI/débours), utilise calcFraisNotaireDetail.
+ */
+export function calcFraisNotaire(
+  prix: number,
+  nature: NatureBienNotaire,
+  opts: FraisNotaireOptions = {},
+): number {
+  return calcFraisNotaireDetail(prix, nature, opts).total
+}
+
+/**
+ * Estime les frais de notaire à partir du `typeAchat` Apolline (FR libellé).
+ * Wrapper qui mappe TypeAchat → NatureBienNotaire et accepte le département.
+ *
+ * Retourne null si pas calculable (prix à 0 ou typeAchat inconnu).
+ */
+export function calcFraisNotaireFromTypeAchat(
+  prix: number,
+  typeAchat: string | undefined | null,
+  opts: FraisNotaireOptions = {},
+): number | null {
+  if (prix <= 0) return null
+  const t = (typeAchat ?? '').toLowerCase()
+  let nature: NatureBienNotaire
+  if (t === 'neuf') nature = 'neuf'
+  else if (t === 'vefa') nature = 'vefa'
+  else if (t === 'terrain') nature = 'terrain'
+  else if (t === 'ancien' || t === 'rachat' || t === 'travaux' || t === 'construction') nature = 'ancien'
+  else return null
+  return calcFraisNotaire(prix, nature, opts)
+}
+
 /**
  * TAEG — Taux Annuel Effectif Global (méthode actuarielle conforme art. R.314-3 CCons.).
  *

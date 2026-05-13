@@ -10,7 +10,8 @@ import FactureFormModal from '@/components/FactureFormModal'
 import StatusBadge from '@/components/StatusBadge'
 import { factures as facturesApi, type Facture, pieces as piecesApi, auditDossier as auditDossierApi, type AuditDossierResult } from '@/db/api'
 import AuditDossierModal from '@/components/AuditDossierModal'
-import { effectiveMensualite, calcTAEG, calcTAEA } from '@/lib/finance'
+import { effectiveMensualite, calcTAEG, calcTAEA, calcFraisNotaireDetail } from '@/lib/finance'
+import type { NatureBienNotaire } from '@/lib/finance'
 import PlanFinancementModal from '@/components/PlanFinancementModal'
 import OffresComparateur from '@/components/OffresComparateur'
 import Modal from '@/components/Modal'
@@ -1070,13 +1071,48 @@ function DpeBadge({ classe, kind }: { classe?: string; kind: 'dpe' | 'ges' }) {
 function TabProjet({ dossier }: { dossier: Dossier }) {
   const bien = dossier.bienDetails ?? {}
 
+  // Prix retenu pour l'assiette des frais de notaire = coût logement OU montant bien
+  const prixBien = dossier.coutLogement || dossier.montantBien || 0
+
+  // Mapping TypeAchat (libellé FR) → NatureBienNotaire (slug interne)
+  const natureForNotaire: NatureBienNotaire | null = (() => {
+    const t = (dossier.typeAchat ?? '').toLowerCase()
+    if (t === 'neuf') return 'neuf'
+    if (t === 'vefa') return 'vefa'
+    if (t === 'terrain') return 'terrain'
+    if (t === 'ancien' || t === 'rachat' || t === 'travaux' || t === 'construction') return 'ancien'
+    return null
+  })()
+
+  // Détection du département depuis le code postal (5 premiers chiffres du villeBien
+  // si format "21000 DIJON", ou via dossier.codePostal si disponible)
+  const departement = (() => {
+    const ville = dossier.villeBien ?? ''
+    const m = ville.match(/\b(\d{5})\b/)
+    if (!m) return undefined
+    const cp = m[1]!
+    // Mayotte = "976xx", Métropole = "XXXxx" → on retourne le département
+    if (cp.startsWith('976')) return '976'
+    return cp.slice(0, 2)
+  })()
+
+  // Calcul des frais notaire détaillés (si possible)
+  const notaireDetail = (prixBien > 0 && natureForNotaire)
+    ? calcFraisNotaireDetail(prixBien, natureForNotaire, { departement })
+    : null
+
+  // Frais notaire — si pas renseignés mais prix+type connus, on estime
+  const fraisNotaireStored = dossier.fraisNotaire ?? 0
+  const fraisNotaireEstime = fraisNotaireStored === 0 && notaireDetail ? notaireDetail.total : null
+  const fraisNotaireEffectif = fraisNotaireStored || fraisNotaireEstime || 0
+
   const coutTotal =
     (dossier.coutLogement ?? dossier.montantBien ?? 0)
     + (dossier.coutTerrain ?? 0)
     + (dossier.coutTravaux ?? 0)
     + (dossier.coutMobilier ?? 0)
     + (dossier.coutViabilisation ?? 0)
-    + (dossier.fraisNotaire ?? 0)
+    + fraisNotaireEffectif
     + (dossier.fraisAgence ?? 0)
     + (dossier.fraisEtablissement ?? 0)
     + (dossier.fraisExpertise ?? 0)
@@ -1195,11 +1231,68 @@ function TabProjet({ dossier }: { dossier: Dossier }) {
 
       <Section title="Frais annexes">
         <div className="grid grid-cols-4 gap-5">
-          <MontantField label="Frais notaire" value={dossier.fraisNotaire ?? 0} />
+          {/* Frais notaire — affiche l'estimation auto si pas renseigné mais prix+type connus */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Frais notaire</span>
+            {fraisNotaireStored > 0 ? (
+              <span className="text-sm font-mono text-navy-900">{eur(fraisNotaireStored)}</span>
+            ) : fraisNotaireEstime != null ? (
+              <span className="text-sm font-mono text-gold-700">
+                {eur(fraisNotaireEstime)} <span className="text-[10px] italic text-navy-500">(estimé)</span>
+              </span>
+            ) : (
+              <span className="text-sm italic text-navy-300">Non renseigné</span>
+            )}
+          </div>
           <MontantField label="Frais agence" value={dossier.fraisAgence ?? 0} />
           <MontantField label="Frais établissement" value={dossier.fraisEtablissement ?? 0} />
           <MontantField label="Frais expertise" value={dossier.fraisExpertise ?? 0} />
         </div>
+
+        {/* Décomposition détaillée des frais notaire estimés */}
+        {notaireDetail && fraisNotaireStored === 0 && (
+          <div className="mt-4 rounded-lg bg-gold-50/40 border border-gold-200 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[11px] uppercase tracking-wider text-gold-800 font-semibold">
+                Détail estimation frais d'acquisition
+              </span>
+              <span className="text-[10px] text-navy-500 italic">
+                ({(notaireDetail.ratioPrix * 100).toFixed(1)} % du prix)
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-3 text-xs">
+              <div className="rounded bg-white border border-gold-100 p-2">
+                <div className="text-[9px] uppercase tracking-wider text-navy-500 font-semibold">Émoluments notaire</div>
+                <div className="font-mono font-semibold text-navy-900 mt-0.5">{eur(notaireDetail.emoluments)}</div>
+                <div className="text-[9px] text-navy-400 mt-0.5">Barème dégressif + TVA 20 %</div>
+              </div>
+              <div className="rounded bg-white border border-gold-100 p-2">
+                <div className="text-[9px] uppercase tracking-wider text-navy-500 font-semibold">
+                  Droits mutation ({(notaireDetail.tauxDmtoAppli * 100).toFixed(3)} %)
+                </div>
+                <div className="font-mono font-semibold text-navy-900 mt-0.5">{eur(notaireDetail.dmto)}</div>
+                <div className="text-[9px] text-navy-400 mt-0.5">
+                  {notaireDetail.tauxDmtoAppli === 0.00715 ? 'Neuf / VEFA' :
+                   notaireDetail.tauxDmtoAppli === 0.0450 ? `Ancien dépt ${departement} (réduit)` :
+                   'Ancien standard'}
+                </div>
+              </div>
+              <div className="rounded bg-white border border-gold-100 p-2">
+                <div className="text-[9px] uppercase tracking-wider text-navy-500 font-semibold">CSI (0,10 %)</div>
+                <div className="font-mono font-semibold text-navy-900 mt-0.5">{eur(notaireDetail.csi)}</div>
+                <div className="text-[9px] text-navy-400 mt-0.5">Sécurité immobilière</div>
+              </div>
+              <div className="rounded bg-white border border-gold-100 p-2">
+                <div className="text-[9px] uppercase tracking-wider text-navy-500 font-semibold">Débours / formalités</div>
+                <div className="font-mono font-semibold text-navy-900 mt-0.5">{eur(notaireDetail.debours)}</div>
+                <div className="text-[9px] text-navy-400 mt-0.5">Cadastre, urba, état civil</div>
+              </div>
+            </div>
+            <div className="mt-3 text-[11px] text-navy-600 italic">
+              ℹ️ Estimation conforme barème officiel français (Code de commerce R 444 + DMTO art. 1594D CGI). Valeur indicative à ±2 % — peut varier selon le département (taxes additionnelles), la présence d'une part de mobilier déductible, ou la remise loi Macron (-20 % au-delà de 100 k€, faculté du notaire).
+            </div>
+          </div>
+        )}
       </Section>
 
       <Section title="Synthèse">
