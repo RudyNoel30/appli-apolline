@@ -475,8 +475,8 @@ export default function DossierDetail() {
           {/* key={tab} sur le wrapper → React remonte le contenu à chaque
               changement d'onglet, ce qui rejoue l'animation tab-content. */}
           <div key={tab} className="p-6 tab-content">
-            {tab === 'etatcivil' && <TabEtatCivil client={client} />}
-            {tab === 'revenus' && <TabRevenus client={client} />}
+            {tab === 'etatcivil' && <TabEtatCivil client={client} dossier={dossier} />}
+            {tab === 'revenus' && <TabRevenus client={client} dossier={dossier} />}
             {tab === 'patrimoine' && <TabPatrimoine dossier={dossier} client={client} onEdit={() => setEditModal(true)} />}
             {tab === 'projet' && <TabProjet dossier={dossier} />}
             {tab === 'financement' && <TabFinancement dossier={dossier} />}
@@ -599,28 +599,91 @@ function Field({ label, value }: { label: string; value: string }) {
   )
 }
 
-function TabEtatCivil({ client }: { client: any }) {
+/** Libellés français pour les valeurs canoniques stockées en BDD */
+const SITUATION_LABELS: Record<string, string> = {
+  marie: 'Marié(e)',
+  pacse: 'Pacsé(e)',
+  celibataire: 'Célibataire',
+  divorce: 'Divorcé(e)',
+  veuf: 'Veuf/Veuve',
+  union_libre: 'Union libre',
+}
+
+const CONTRAT_LABELS: Record<string, string> = {
+  CDI: 'CDI',
+  CDD: 'CDD',
+  interim: 'Intérim',
+  stage: 'Stage',
+  alternance: 'Alternance',
+  fonctionnaire: 'Fonctionnaire',
+  TNS: 'TNS (indépendant)',
+  profession_liberale: 'Profession libérale',
+  sans_emploi: 'Sans emploi',
+  retraite: 'Retraité',
+  autre: 'Autre',
+}
+
+/** Lit un champ depuis le jsonb emprunteur (peut être null/undefined) */
+function emp<T = string>(emp: unknown, key: string): T | undefined {
+  if (!emp || typeof emp !== 'object') return undefined
+  return (emp as Record<string, unknown>)[key] as T | undefined
+}
+
+function TabEtatCivil({ client, dossier }: { client: any; dossier: Dossier }) {
+  const e1 = dossier.emprunteur1 as Record<string, unknown> | undefined
+  const e2 = dossier.emprunteur2 as Record<string, unknown> | undefined | null
+
+  // Pour l'emprunteur principal, on privilégie les données enrichies du dossier
+  // (emprunteur1 jsonb) qui sont plus complètes que le client de base.
+  const emp1Prenom = emp<string>(e1, 'prenom') || client.prenom
+  const emp1Nom = emp<string>(e1, 'nom') || client.nom
+  const emp1Naissance = emp<string>(e1, 'dateNaissance') || client.naissance
+  const emp1Profession = emp<string>(e1, 'profession') || client.profession || '—'
+  const emp1Contrat = emp<string>(e1, 'typeContrat')
+  const emp1Employeur = emp<string>(e1, 'employeur')
+  const emp1Situation = emp<string>(e1, 'situationFamiliale')
+  const situationLabel = emp1Situation
+    ? (SITUATION_LABELS[emp1Situation] ?? emp1Situation)
+    : (client.conjoint ? 'En couple' : 'Célibataire')
+
   return (
     <>
       <Section title="Emprunteur principal">
         <div className="grid grid-cols-4 gap-5">
-          <Field label="Prénom" value={client.prenom} />
-          <Field label="Nom" value={client.nom} />
-          <Field label="Date de naissance" value={client.naissance ? dateFr(client.naissance) : '—'} />
+          <Field label="Prénom" value={emp1Prenom} />
+          <Field label="Nom" value={emp1Nom} />
+          <Field label="Date de naissance" value={emp1Naissance ? dateFr(emp1Naissance) : '—'} />
           <Field label="Ville" value={client.ville} />
-          <Field label="Email" value={client.email} />
+          <Field label="Email" value={client.email || '—'} />
           <Field label="Téléphone" value={client.tel || '—'} />
-          <Field label="Profession" value={client.profession || '—'} />
-          <Field label="Situation" value={client.conjoint ? 'Marié(e)' : 'Célibataire'} />
+          <Field label="Profession" value={emp1Profession} />
+          <Field label="Situation" value={situationLabel} />
+          {emp1Employeur && <Field label="Employeur" value={emp1Employeur} />}
+          {emp1Contrat && <Field label="Contrat" value={CONTRAT_LABELS[emp1Contrat] ?? emp1Contrat} />}
         </div>
       </Section>
-      {client.conjoint && (
+
+      {/* Co-emprunteur : on l'affiche si on a un jsonb emprunteur2 OU au minimum un client.conjoint */}
+      {(e2 || client.conjoint) && (
         <Section title="Co-emprunteur">
           <div className="grid grid-cols-4 gap-5">
-            <Field label="Nom complet" value={client.conjoint} />
-            <Field label="Profession" value="À compléter" />
-            <Field label="Contrat" value="À compléter" />
-            <Field label="Employeur" value="À compléter" />
+            <Field label="Prénom" value={emp<string>(e2, 'prenom') ?? (client.conjoint ? client.conjoint.split(' ')[0] : '—')} />
+            <Field label="Nom" value={emp<string>(e2, 'nom') ?? (client.conjoint ? client.conjoint.split(' ').slice(1).join(' ') : '—')} />
+            <Field label="Date de naissance" value={(() => {
+              const d = emp<string>(e2, 'dateNaissance')
+              return d ? dateFr(d) : '—'
+            })()} />
+            <Field label="Nationalité" value={emp<string>(e2, 'nationalite') || '—'} />
+            <Field label="Profession" value={emp<string>(e2, 'profession') || '—'} />
+            <Field label="Contrat" value={(() => {
+              const c = emp<string>(e2, 'typeContrat')
+              return c ? (CONTRAT_LABELS[c] ?? c) : '—'
+            })()} />
+            <Field label="Employeur" value={emp<string>(e2, 'employeur') || '—'} />
+            <Field label="Ancienneté" value={(() => {
+              const a = emp<number>(e2, 'anciennete')
+              return a ? `${Math.floor(a / 12)} an${a >= 24 ? 's' : ''}${a % 12 > 0 ? ` ${a % 12} mois` : ''}` : '—'
+            })()} />
           </div>
         </Section>
       )}
@@ -628,25 +691,82 @@ function TabEtatCivil({ client }: { client: any }) {
   )
 }
 
-function TabRevenus({ client }: { client: any }) {
+function TabRevenus({ client, dossier }: { client: any; dossier: Dossier }) {
+  const e1 = dossier.emprunteur1 as Record<string, unknown> | undefined
+  const e2 = dossier.emprunteur2 as Record<string, unknown> | undefined | null
+
+  const buildBlock = (titre: string, emprunteur: Record<string, unknown> | undefined | null, fallbackRevenu?: number) => {
+    const salaire = (emp<number>(emprunteur, 'salaireNet') ?? fallbackRevenu) || 0
+    const baBicBnc = emp<number>(emprunteur, 'baBicBnc') || 0
+    const baBicBncMois = emp<number>(emprunteur, 'baBicBncMois') || 12
+    const rfBruts = emp<number>(emprunteur, 'rfBrutsExistants') || 0
+    const autresRev = emp<number>(emprunteur, 'autresRevenusNonSociaux') || 0
+    const revSoc = emp<number>(emprunteur, 'revenusSociaux') || 0
+    const pensionRecue = emp<number>(emprunteur, 'pensionAlimentaireRecue') || 0
+    const rfrN1 = emp<number>(emprunteur, 'rfPersonnelN1') || 0
+    const rfrN2 = emp<number>(emprunteur, 'rfPersonnelN2') || 0
+
+    // Total brut mensuel approximatif
+    const baBicBncMensuel = baBicBncMois > 0 ? baBicBnc / baBicBncMois : 0
+    const totalMensuel = salaire + baBicBncMensuel + rfBruts + autresRev + revSoc + pensionRecue
+
+    return (
+      <div className="bg-ivory rounded-lg p-4">
+        <div className="text-xs uppercase tracking-wider font-semibold text-navy-500 mb-2">{titre}</div>
+        <table className="w-full text-sm">
+          <tbody className="divide-y divide-navy-100">
+            <tr><td className="py-2">Salaire net mensuel</td><td className="py-2 text-right font-mono">{eur(salaire)}</td></tr>
+            {baBicBnc > 0 && (
+              <tr><td className="py-2">BIC / BNC / BA</td><td className="py-2 text-right font-mono">{eur(baBicBnc)} / {baBicBncMois}m</td></tr>
+            )}
+            {rfBruts > 0 && (
+              <tr><td className="py-2">Revenus fonciers bruts</td><td className="py-2 text-right font-mono">{eur(rfBruts)}</td></tr>
+            )}
+            {autresRev > 0 && (
+              <tr><td className="py-2">Autres revenus</td><td className="py-2 text-right font-mono">{eur(autresRev)}</td></tr>
+            )}
+            {revSoc > 0 && (
+              <tr><td className="py-2">Revenus sociaux</td><td className="py-2 text-right font-mono">{eur(revSoc)}</td></tr>
+            )}
+            {pensionRecue > 0 && (
+              <tr><td className="py-2">Pension reçue</td><td className="py-2 text-right font-mono">{eur(pensionRecue)}</td></tr>
+            )}
+            <tr className="border-t-2 border-navy-200">
+              <td className="py-2 font-semibold">Total mensuel</td>
+              <td className="py-2 text-right font-serif font-semibold text-gold-700">{eur(Math.round(totalMensuel))}</td>
+            </tr>
+            {rfrN1 > 0 && (
+              <tr><td className="py-2 text-navy-500">RFR N-1</td><td className="py-2 text-right font-mono text-xs text-navy-500">{eur(rfrN1)}</td></tr>
+            )}
+            {rfrN2 > 0 && (
+              <tr><td className="py-2 text-navy-500">RFR N-2</td><td className="py-2 text-right font-mono text-xs text-navy-500">{eur(rfrN2)}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
   return (
     <Section title="Revenus mensuels nets retenus">
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-ivory rounded-lg p-4">
-          <div className="text-xs uppercase tracking-wider font-semibold text-navy-500 mb-2">Emprunteur principal</div>
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-navy-100">
-              <tr><td className="py-2 font-semibold">Revenu retenu</td><td className="py-2 text-right font-serif font-semibold text-gold-700">{eur(client.revenuMensuelNet)}</td></tr>
-            </tbody>
-          </table>
-        </div>
-        {client.conjoint && (
-          <div className="bg-ivory rounded-lg p-4">
-            <div className="text-xs uppercase tracking-wider font-semibold text-navy-500 mb-2">Co-emprunteur</div>
-            <div className="text-sm text-navy-500">À compléter</div>
-          </div>
-        )}
+        {buildBlock('Emprunteur principal', e1, client.revenuMensuelNet)}
+        {(e2 || client.conjoint) && buildBlock('Co-emprunteur', e2, 0)}
       </div>
+
+      {/* Total foyer si on a les 2 emprunteurs */}
+      {e2 && (
+        <div className="mt-4 p-3 rounded-lg bg-gold-50/40 border border-gold-200 flex items-center justify-between">
+          <span className="text-sm font-semibold text-navy-900">Total revenus foyer (mensuel)</span>
+          <span className="font-serif text-lg font-bold text-gold-700">
+            {(() => {
+              const s1 = (emp<number>(e1, 'salaireNet') || client.revenuMensuelNet || 0)
+              const s2 = (emp<number>(e2, 'salaireNet') || 0)
+              return eur(s1 + s2)
+            })()}
+          </span>
+        </div>
+      )}
     </Section>
   )
 }
