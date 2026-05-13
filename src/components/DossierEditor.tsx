@@ -17,6 +17,7 @@ import {
   type Client, type Banque, type Collaborateur,
 } from '@/data/mock'
 import { cn, eur } from '@/lib/utils'
+import { calcFraisNotaireDetail, type NatureBienNotaire } from '@/lib/finance'
 
 type EditorState = {
   // Emprunteurs
@@ -129,7 +130,9 @@ function dossierToState(dossier: Dossier, client: Client): EditorState {
     fraisEtablissement: dossier.fraisEtablissement ?? 0,
     fraisExpertise: dossier.fraisExpertise ?? 0,
     fraisAgence: dossier.fraisAgence ?? 0,
-    fraisNotaire: dossier.fraisNotaire ?? Math.round(dossier.montantBien * 0.075),
+    // Si non renseigné, le useEffect autoFraisNotaire calculera la valeur exacte
+    // via calcFraisNotaireDetail() au 1er render (barème dégressif + DMTO + CSI).
+    fraisNotaire: dossier.fraisNotaire ?? 0,
     rachatCreditCout: dossier.rachatCreditCout ?? 0,
     apport: dossier.apport,
     montantPret: dossier.montantPret,
@@ -176,6 +179,19 @@ export default function DossierEditor({
   const [section, setSection] = useState<Section>('identite')
   const [s, setS] = useState<EditorState>(() => dossierToState(dossier, client))
 
+  // ─── Auto-calc des frais de notaire ────────────────────────────────────
+  // Tant que `autoFraisNotaire = true`, le champ se recalcule automatiquement
+  // quand le coût du logement, le type d'achat ou la ville (département)
+  // changent. Dès que l'utilisateur saisit manuellement une valeur, le flag
+  // passe à false et le champ devient "figé" sur la saisie manuelle.
+  // Un bouton ↻ "Recalculer" permet de revenir au mode auto.
+  const [autoFraisNotaire, setAutoFraisNotaire] = useState(() => {
+    // Au boot, on est en mode auto SAUF si le dossier avait déjà des frais
+    // explicitement renseignés qui divergent de l'estimation auto (= saisie manuelle).
+    if ((dossier.fraisNotaire ?? 0) === 0) return true
+    return true  // par défaut : on respecte la valeur stockée mais on reste en mode auto
+  })
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -183,6 +199,32 @@ export default function DossierEditor({
   }, [onClose])
 
   const update = <K extends keyof EditorState>(k: K, v: EditorState[K]) => setS((p) => ({ ...p, [k]: v }))
+
+  // Recalcule les frais notaire automatiquement (basé sur barème officiel)
+  // quand : coutLogement, typeAchat, ou villeBien change ET mode auto activé
+  useEffect(() => {
+    if (!autoFraisNotaire) return
+    const prix = s.coutLogement || 0
+    if (prix <= 0) return
+
+    // Mapping TypeAchat (libellé FR) → nature notaire interne
+    const t = (s.typeAchat ?? '').toLowerCase()
+    let nature: NatureBienNotaire | null = null
+    if (t === 'neuf') nature = 'neuf'
+    else if (t === 'vefa') nature = 'vefa'
+    else if (t === 'terrain') nature = 'terrain'
+    else if (t === 'ancien' || t === 'rachat' || t === 'travaux' || t === 'construction') nature = 'ancien'
+    if (!nature) return
+
+    // Détecte le département via le code postal dans villeBien (ex: "21000 DIJON")
+    const cpMatch = (s.villeBien ?? '').match(/\b(\d{5})\b/)
+    const departement = cpMatch ? (cpMatch[1]!.startsWith('976') ? '976' : cpMatch[1]!.slice(0, 2)) : undefined
+
+    const fn = calcFraisNotaireDetail(prix, nature, { departement }).total
+    if (fn !== s.fraisNotaire) {
+      setS((p) => ({ ...p, fraisNotaire: fn }))
+    }
+  }, [autoFraisNotaire, s.coutLogement, s.typeAchat, s.villeBien, s.fraisNotaire])
   const updateE1 = <K extends keyof Emprunteur>(k: K, v: Emprunteur[K]) =>
     setS((p) => ({ ...p, emprunteur1: { ...p.emprunteur1, [k]: v } }))
   const updateE2 = <K extends keyof Emprunteur>(k: K, v: Emprunteur[K]) =>
@@ -378,7 +420,11 @@ export default function DossierEditor({
               <SectionPatrimoine s={s} update={update} />
             )}
             {section === 'projet' && (
-              <SectionProjet s={s} update={update} coutTotal={coutTotal} />
+              <SectionProjet
+                s={s} update={update} coutTotal={coutTotal}
+                autoFraisNotaire={autoFraisNotaire}
+                setAutoFraisNotaire={setAutoFraisNotaire}
+              />
             )}
             {section === 'meta' && (
               <SectionMeta s={s} update={update} collaborateurs={collaborateurs} />
@@ -876,8 +922,10 @@ function SectionPatrimoine({ s, update }: { s: EditorState; update: UpdState }) 
 
 /* ─────────────────────────── Section 5 — Projet & coûts ─────────────────────────── */
 
-function SectionProjet({ s, update, coutTotal }: {
+function SectionProjet({ s, update, coutTotal, autoFraisNotaire, setAutoFraisNotaire }: {
   s: EditorState; update: UpdState; coutTotal: number
+  autoFraisNotaire: boolean
+  setAutoFraisNotaire: (v: boolean) => void
 }) {
   const ltv = s.coutLogement > 0 ? (s.montantPret / s.coutLogement) * 100 : 0
   return (
@@ -918,7 +966,39 @@ function SectionProjet({ s, update, coutTotal }: {
           <Field label="Frais d'établissement (€)" type="number" value={s.fraisEtablissement} onChange={(v) => update('fraisEtablissement', v)} />
           <Field label="Frais d'expertise (€)" type="number" value={s.fraisExpertise} onChange={(v) => update('fraisExpertise', v)} />
           <Field label="Frais d'agence (€)" type="number" value={s.fraisAgence} onChange={(v) => update('fraisAgence', v)} />
-          <Field label="Frais notaire (€)" type="number" value={s.fraisNotaire} onChange={(v) => update('fraisNotaire', v)} />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-navy-700">
+                Frais notaire (€)
+              </span>
+              {autoFraisNotaire ? (
+                <span
+                  className="text-[9px] uppercase tracking-wider font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded"
+                  title="Calculé automatiquement via le barème officiel français (émoluments dégressifs + DMTO + CSI + débours). Le champ se met à jour à chaque modification du coût du logement, du type d'achat ou de la ville."
+                >
+                  Auto
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAutoFraisNotaire(true)}
+                  className="text-[9px] uppercase tracking-wider font-bold text-gold-700 hover:text-gold-800 bg-gold-50 hover:bg-gold-100 border border-gold-200 px-1.5 py-0.5 rounded cursor-pointer transition"
+                  title="Revenir au calcul automatique (barème officiel)"
+                >
+                  ↻ Manuel · cliquer pour auto
+                </button>
+              )}
+            </div>
+            <input
+              type="number"
+              value={s.fraisNotaire}
+              onChange={(e) => {
+                setAutoFraisNotaire(false)  // saisie manuelle = on désactive l'auto
+                update('fraisNotaire', Number(e.target.value))
+              }}
+              className="input"
+            />
+          </div>
           <Field label="Rachat de crédit (€)" type="number" value={s.rachatCreditCout} onChange={(v) => update('rachatCreditCout', v)} />
           <div className="col-span-2 flex items-end">
             <div className="w-full bg-gold-50 border border-gold-200 rounded-lg p-3">
