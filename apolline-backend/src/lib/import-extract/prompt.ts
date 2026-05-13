@@ -41,10 +41,10 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
   },
 
   "dossier": {
-    "typeProjet": "RP|RS|locatif|investissement|rachat|construction|autre",
-    "typeAchat": "ancien|neuf|VEFA|construction|autre ou null",
-    "destination": "RP|RS|locatif ou null",
-    "typeLogement": "maison|appartement|terrain|autre ou null",
+    "typeProjet": "string libre (ex: 'Acquisition RP', 'Investissement locatif', 'Construction')",
+    "typeAchat": "Ancien|Neuf|VEFA|Construction|Terrain|Rachat|Travaux ou null",
+    "destination": "Résidence principale|Résidence secondaire|Locatif|Mixte|Pro ou null",
+    "typeLogement": "Maison|Appartement|Terrain|Local commercial|Immeuble|Studio ou null",
     "villeBien": "string — ville du bien à acquérir",
     "ptzZone": "A_bis|A|B1|B2|C ou null — zone PTZ si calculable",
     "compromisSigne": boolean,
@@ -78,24 +78,27 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
 
     "creditsExistants": [
       {
-        "type": "string — ex: 'Auto', 'Conso', 'Travaux', 'Étudiant', 'Revolving', 'Locatif'",
-        "banque": "string ou ''",
-        "montantInitial": number,
-        "capitalRestant": number,
+        "id": "string — UUID v4 que tu génères toi-même (ex: 'cred-1', 'cred-2'…)",
+        "libelle": "string — libellé court (ex: 'Prêt auto Cofidis')",
+        "type": "Immobilier|Conso|Auto|Travaux|Étudiant|Autre",
+        "organisme": "string — nom de l'organisme prêteur ou ''",
+        "crd": number,
         "mensualite": number,
-        "dateFin": "YYYY-MM-DD ou ''",
-        "destination": "string — ex: 'à conserver', 'à racheter', 'à solder'"
+        "terme": "YYYY-MM-DD ou ''",
+        "devenir": "À solder|À conserver|À reprendre|En cours"
       }
     ],
 
     "patrimoine": [
       {
-        "type": "string — ex: 'Résidence principale', 'Résidence secondaire', 'Locatif', 'Terrain', 'Local pro'",
-        "adresse": "string ou ''",
-        "valeurEstimee": number,
-        "capitalRestantDu": number,
-        "loyerMensuel": number,
-        "statut": "string — ex: 'détenu', 'en indivision', 'usufruit'"
+        "id": "string — id court que tu génères (ex: 'bien-1', 'bien-2'…)",
+        "libelle": "string — libellé court (ex: 'Maison familiale Bourgogne')",
+        "type": "Résidence principale|Résidence secondaire|Locatif|Terrain|Local pro|Autre",
+        "valeur": number,
+        "crd": number,
+        "revenu": number,
+        "hypotheque": boolean,
+        "venteEnvisagee": boolean
       }
     ],
 
@@ -104,17 +107,29 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
   },
 
   "emprunteur1": {
+    "civilite": "M.|Mme|Mlle",
     "prenom": "string",
     "nom": "string",
-    "dateNaissance": "YYYY-MM-DD ou ''",
+    "naissance": "YYYY-MM-DD ou ''",
     "lieuNaissance": "string ou ''",
     "nationalite": "string ou 'Française'",
-    "situationFamiliale": "marie|pacse|celibataire|divorce|veuf|union_libre",
-    "regimeMatrimonial": "string ou ''",
+
+    "email": "string ou ''",
+    "telDom": "string ou ''",
+    "telMobile": "string ou ''",
+    "adresse": "string ou ''",
+    "adresseSuite": "string ou ''",
+    "codePostal": "string ou ''",
+    "ville": "string ou ''",
+
+    "situationFamiliale": "Célibataire|Marié(e)|Pacsé(e)|Divorcé(e)|Veuf(ve)|Concubinage",
+    "regimeMatrimonial": "Communauté légale|Séparation de biens|Communauté universelle|Participation aux acquêts|N/A",
+    "enfantsACharge": number,
+    "rgpdAccord": false,
     "primoAccedant": boolean,
 
     "profession": "string",
-    "typeContrat": "CDI|CDD|interim|stage|alternance|fonctionnaire|TNS|profession_liberale|sans_emploi|retraite|autre",
+    "typeContrat": "CDI|CDD|Période d'essai|Fonctionnaire|Indépendant|Gérant majoritaire|Profession libérale|Retraité|Sans emploi|Étudiant",
     "employeur": "string",
     "dateEmbauche": "YYYY-MM-DD ou ''",
     "anciennete": number,
@@ -137,7 +152,7 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
     "empruntsLocatifs": number,
     "empruntsNonLocatifs": number,
 
-    "statutOccupation": "proprietaire|locataire|loge_gratuit|chez_parents|autre",
+    "statutOccupation": "Locataire|Propriétaire|Hébergé|Logement de fonction|HLM|Logé à titre gratuit",
     "logementDepuis": "YYYY-MM-DD ou ''",
     "loyerActuel": number,
     "hlm": boolean
@@ -167,31 +182,48 @@ RÈGLES D'EXTRACTION PRÉCISES :
 
 3. **Ancienneté** : convertir en mois (ex: "6 ans 5 mois" → 77, "3 mois 25 jours" → 4)
 
-4. **TypeContrat** : déduire depuis le texte :
+4. **TypeContrat** — valeurs autorisées EXACTES (libellés FR — ne PAS utiliser de slugs en minuscule) :
    - "Profil A CDI" → "CDI"
-   - "TNS" / "indépendant" → "TNS"
+   - "Période d'essai" → "Période d'essai"
+   - "TNS" / "indépendant" → "Indépendant"
+   - "Gérant SARL" / "Gérant majoritaire" → "Gérant majoritaire"
    - "CDD" → "CDD"
-   - "Profession libérale" → "profession_liberale"
-   - "Fonctionnaire" → "fonctionnaire"
+   - "Profession libérale" → "Profession libérale"
+   - "Fonctionnaire" → "Fonctionnaire"
+   - "Retraité" → "Retraité"
+   - "Sans emploi" / "Chômage" → "Sans emploi"
+   - "Étudiant" → "Étudiant"
 
-5. **Situation matrimoniale** : depuis §1.3 FOYER
-   - "PACS enregistré" → "pacse"
-   - "Marié(e)" → "marie"
-   - "Concubinage" / "union libre" → "union_libre"
-   - "Célibataire" → "celibataire"
+5. **Situation matrimoniale** : depuis §1.3 FOYER — valeurs autorisées EXACTES :
+   - "PACS enregistré" / "Pacsé(e)" → "Pacsé(e)"
+   - "Marié(e)" → "Marié(e)"
+   - "Concubinage" / "union libre" → "Concubinage"
+   - "Divorcé(e)" → "Divorcé(e)"
+   - "Veuf(ve)" → "Veuf(ve)"
+   - "Célibataire" → "Célibataire"
 
-6. **Statut logement actuel** : depuis §2.1 ADRESSE & STATUT LOGEMENT
-   - "Vraisemblance : LOCATAIRES" → "locataire"
-   - "Propriétaires" → "proprietaire"
-   - "Logé gratuit" → "loge_gratuit"
-   - "Chez parents" → "chez_parents"
-   - Si non déterminé → "locataire" (hypothèse la plus fréquente)
+6. **Régime matrimonial** : valeurs autorisées EXACTES :
+   - "Communauté légale" / "Communauté réduite aux acquêts" → "Communauté légale"
+   - "Séparation de biens" → "Séparation de biens"
+   - "Communauté universelle" → "Communauté universelle"
+   - "Participation aux acquêts" → "Participation aux acquêts"
+   - Pour les célibataires ou si pas applicable → "N/A"
 
-7. **Bien immobilier** (§5.1 LE BIEN) :
+7. **Statut logement actuel** : depuis §2.1 — valeurs autorisées EXACTES :
+   - "Locataire" → "Locataire"
+   - "Propriétaire" → "Propriétaire"
+   - "Hébergé" / "chez parents" → "Hébergé"
+   - "Logement de fonction" → "Logement de fonction"
+   - "HLM" → "HLM"
+   - "Logé à titre gratuit" → "Logé à titre gratuit"
+   - Si non déterminé → "Locataire" (hypothèse la plus fréquente)
+
+8. **Bien immobilier** (§5.1) — valeurs autorisées EXACTES :
    - villeBien : ville exacte en majuscule (ex: "CHEVIGNY")
-   - typeProjet : "RP" par défaut, "locatif" si destination locative, "RS" si secondaire
-   - typeAchat : "ancien" pour maison/appartement existante, "neuf" si VEFA, "construction" si construction neuve
-   - typeLogement : "maison", "appartement", "terrain"
+   - typeProjet : string libre (ex: "Acquisition RP", "Investissement locatif")
+   - typeAchat : "Ancien" pour maison/appartement existant, "Neuf" pour neuf, "VEFA" si VEFA, "Construction" si construction neuve, "Rachat" si rachat de crédit, "Travaux" si financement travaux
+   - typeLogement : "Maison" / "Appartement" / "Terrain" / "Local commercial" / "Immeuble" / "Studio"
+   - destination : "Résidence principale" / "Résidence secondaire" / "Locatif" / "Mixte" / "Pro"
    - Si prix de vente "Non communiqué" → montantBien=0 et coutLogement=0
    - Si prix de vente connu → mets-le dans montantBien ET coutLogement (sauf si terrain séparé)
 

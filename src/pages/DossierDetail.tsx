@@ -1025,15 +1025,72 @@ function PatrimoineKpi({ label, value, hint, accent = 'navy' }: {
 }
 
 function TabProjet({ dossier }: { dossier: Dossier }) {
+  const coutTotal =
+    (dossier.coutLogement ?? dossier.montantBien ?? 0)
+    + (dossier.coutTerrain ?? 0)
+    + (dossier.coutTravaux ?? 0)
+    + (dossier.coutMobilier ?? 0)
+    + (dossier.coutViabilisation ?? 0)
+    + (dossier.fraisNotaire ?? 0)
+    + (dossier.fraisAgence ?? 0)
+    + (dossier.fraisEtablissement ?? 0)
+    + (dossier.fraisExpertise ?? 0)
+    + (dossier.rachatCreditCout ?? 0)
+
   return (
-    <Section title="Bien immobilier">
-      <div className="grid grid-cols-4 gap-5">
-        <Field label="Type de projet" value={dossier.typeProjet} />
-        <Field label="Ville" value={dossier.villeBien} />
-        <Field label="Prix FAI" value={eur(dossier.montantBien)} />
-        <Field label="Apport" value={eur(dossier.apport)} />
-      </div>
-    </Section>
+    <>
+      <Section title="Caractéristiques du bien">
+        <div className="grid grid-cols-4 gap-5">
+          <Field label="Type de projet" value={dossier.typeProjet || '—'} />
+          <Field label="Type d'achat" value={dossier.typeAchat || '—'} />
+          <Field label="Destination" value={dossier.destination || '—'} />
+          <Field label="Type de logement" value={dossier.typeLogement || '—'} />
+          <Field label="Ville" value={dossier.villeBien || '—'} />
+          <Field label="Zone PTZ" value={dossier.ptzZone ? `Zone ${dossier.ptzZone}` : '—'} />
+          <Field label="Compromis signé" value={dossier.compromisSigne ? 'Oui' : 'Non'} />
+          <Field label="Acte prévu le" value={dossier.actePrevuLe ? dateFr(dossier.actePrevuLe) : '—'} />
+        </div>
+      </Section>
+
+      <Section title="Coûts de l'opération">
+        <div className="grid grid-cols-4 gap-5">
+          <Field label="Prix FAI / bien" value={eur(dossier.montantBien ?? 0)} />
+          <Field label="Coût logement" value={eur(dossier.coutLogement ?? 0)} />
+          <Field label="Coût terrain" value={eur(dossier.coutTerrain ?? 0)} />
+          <Field label="Coût travaux" value={eur(dossier.coutTravaux ?? 0)} />
+          <Field label="Coût mobilier" value={eur(dossier.coutMobilier ?? 0)} />
+          <Field label="Viabilisation" value={eur(dossier.coutViabilisation ?? 0)} />
+          <Field label="Rachat crédit" value={eur(dossier.rachatCreditCout ?? 0)} />
+          <div /> {/* placeholder grille */}
+        </div>
+      </Section>
+
+      <Section title="Frais annexes">
+        <div className="grid grid-cols-4 gap-5">
+          <Field label="Frais notaire" value={eur(dossier.fraisNotaire ?? 0)} />
+          <Field label="Frais agence" value={eur(dossier.fraisAgence ?? 0)} />
+          <Field label="Frais établissement" value={eur(dossier.fraisEtablissement ?? 0)} />
+          <Field label="Frais expertise" value={eur(dossier.fraisExpertise ?? 0)} />
+        </div>
+      </Section>
+
+      <Section title="Synthèse">
+        <div className="grid grid-cols-3 gap-5">
+          <div className="rounded-lg bg-ivory border border-navy-100 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Coût total opération</div>
+            <div className="font-serif text-2xl font-bold text-navy-900 tabular-nums mt-1">{eur(coutTotal)}</div>
+          </div>
+          <div className="rounded-lg bg-ivory border border-navy-100 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Apport personnel</div>
+            <div className="font-serif text-2xl font-bold text-gold-700 tabular-nums mt-1">{eur(dossier.apport ?? 0)}</div>
+          </div>
+          <div className="rounded-lg bg-ivory border border-navy-100 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Reste à financer</div>
+            <div className="font-serif text-2xl font-bold text-navy-900 tabular-nums mt-1">{eur(Math.max(0, coutTotal - (dossier.apport ?? 0)))}</div>
+          </div>
+        </div>
+      </Section>
+    </>
   )
 }
 
