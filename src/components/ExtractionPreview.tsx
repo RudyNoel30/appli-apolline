@@ -96,7 +96,7 @@ const FIELDS_BY_TYPE: Record<ExtractionType, FieldSpec[]> = {
   cni: [
     { label: 'Nom', path: 'nom', applyTo: { entity: 'client', field: 'emprunteur1.nom' }, confidencePath: 'confidence.identite' },
     { label: 'Prénom', path: 'prenom', applyTo: { entity: 'client', field: 'emprunteur1.prenom' }, confidencePath: 'confidence.identite' },
-    { label: 'Date naissance', path: 'date_naissance', inputType: 'date', applyTo: { entity: 'client', field: 'emprunteur1.dateNaissance' }, confidencePath: 'confidence.identite' },
+    { label: 'Date naissance', path: 'date_naissance', inputType: 'date', applyTo: { entity: 'client', field: 'emprunteur1.naissance' }, confidencePath: 'confidence.identite' },
     { label: 'Lieu naissance', path: 'lieu_naissance', confidencePath: 'confidence.identite' },
     { label: 'Nationalité', path: 'nationalite', confidencePath: 'confidence.identite' },
     { label: 'Date expiration', path: 'date_expiration', inputType: 'date', confidencePath: 'confidence.validite' },

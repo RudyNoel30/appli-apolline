@@ -637,7 +637,13 @@ function TabEtatCivil({ client, dossier }: { client: any; dossier: Dossier }) {
   // (emprunteur1 jsonb) qui sont plus complètes que le client de base.
   const emp1Prenom = emp<string>(e1, 'prenom') || client.prenom
   const emp1Nom = emp<string>(e1, 'nom') || client.nom
-  const emp1Naissance = emp<string>(e1, 'dateNaissance') || client.naissance
+  // Le type Emprunteur du frontend utilise "naissance" (pas "dateNaissance").
+  // On lit "naissance" en priorité, mais on tombe sur "dateNaissance" en
+  // fallback pour rétrocompat avec les anciens imports qui ont stocké la clé
+  // sous l'autre nom.
+  const emp1Naissance = emp<string>(e1, 'naissance')
+    || emp<string>(e1, 'dateNaissance')
+    || client.naissance
   const emp1Profession = emp<string>(e1, 'profession') || client.profession || '—'
   const emp1Contrat = emp<string>(e1, 'typeContrat')
   const emp1Employeur = emp<string>(e1, 'employeur')
@@ -670,7 +676,7 @@ function TabEtatCivil({ client, dossier }: { client: any; dossier: Dossier }) {
             <Field label="Prénom" value={emp<string>(e2, 'prenom') ?? (client.conjoint ? client.conjoint.split(' ')[0] : '—')} />
             <Field label="Nom" value={emp<string>(e2, 'nom') ?? (client.conjoint ? client.conjoint.split(' ').slice(1).join(' ') : '—')} />
             <Field label="Date de naissance" value={(() => {
-              const d = emp<string>(e2, 'dateNaissance')
+              const d = emp<string>(e2, 'naissance') ?? emp<string>(e2, 'dateNaissance')
               return d ? dateFr(d) : '—'
             })()} />
             <Field label="Nationalité" value={emp<string>(e2, 'nationalite') || '—'} />
