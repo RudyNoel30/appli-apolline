@@ -1474,12 +1474,23 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
     return s + Math.max(0, cout)
   }, 0)
 
+  // Coût opération complet — aligné avec TabProjet.coutTotal pour rester cohérent.
+  // Inclut TOUS les postes de l'opération : bien + terrain + travaux + viab + mobilier
+  // + frais notaire/agence/établissement/expertise + rachat crédit + honoraires courtier
+  // (les honoraires sont stockés sur chaque prêt via pret.commission).
+  const honorairesCourtier = prets.reduce((s, p) => s + (p.commission ?? 0), 0)
   const coutOperation =
-    (dossier.coutLogement ?? dossier.montantBien) +
+    (dossier.coutLogement ?? dossier.montantBien ?? 0) +
     (dossier.coutTerrain ?? 0) +
     (dossier.coutTravaux ?? 0) +
+    (dossier.coutMobilier ?? 0) +
+    (dossier.coutViabilisation ?? 0) +
     (dossier.fraisNotaire ?? 0) +
-    (dossier.fraisAgence ?? 0)
+    (dossier.fraisAgence ?? 0) +
+    (dossier.fraisEtablissement ?? 0) +
+    (dossier.fraisExpertise ?? 0) +
+    (dossier.rachatCreditCout ?? 0) +
+    honorairesCourtier
   const ressources = totalEmprunte + (dossier.apport ?? 0)
   const ecart = ressources - coutOperation
 

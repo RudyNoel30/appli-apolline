@@ -56,16 +56,29 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
   const apport = dossier.apport ?? 0
   const totalRessources = totalEmprunte + apport
 
+  // Coût "physique" du projet (bien + terrain + travaux + viab + mobilier)
   const projetHFN = (dossier.coutLogement ?? dossier.montantBien ?? 0)
     + (dossier.coutTerrain ?? 0)
     + (dossier.coutTravaux ?? 0)
     + (dossier.coutViabilisation ?? 0)
     + (dossier.coutMobilier ?? 0)
   const fraisNotaire = dossier.fraisNotaire ?? 0
+  const fraisAgence = dossier.fraisAgence ?? 0
+  const fraisEtablissement = dossier.fraisEtablissement ?? 0
+  const fraisExpertise = dossier.fraisExpertise ?? 0
+  const rachatCreditCout = dossier.rachatCreditCout ?? 0
+  // Frais bancaires agrégés depuis les prêts du dossier
   const fraisGarantie = prets.reduce((s, p) => s + (p.garantieMontant ?? 0), 0)
   const fraisDossier = prets.reduce((s, p) => s + (p.fraisDossier ?? 0), 0)
+  // Honoraires courtier (commission Cifacil/Apolline) — typiquement 3 600 € TTC,
+  // stockés sur le prêt principal mais on somme par sécurité au cas où ils
+  // seraient répartis sur plusieurs prêts.
+  const honorairesCourtier = prets.reduce((s, p) => s + (p.commission ?? 0), 0)
   const subventions = 0 // À étendre plus tard
-  const totalProjet = projetHFN + fraisNotaire + fraisGarantie + fraisDossier - subventions
+  const totalProjet = projetHFN
+    + fraisNotaire + fraisAgence + fraisEtablissement + fraisExpertise + rachatCreditCout
+    + fraisGarantie + fraisDossier + honorairesCourtier
+    - subventions
   const resteAFinancer = totalProjet - totalRessources
 
   // TAEG global du plan = moyenne pondérée par capital
@@ -342,9 +355,20 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
             <KpiBlock title="Détail du projet" compact>
               <KpiRow label="Projet hors FN" value={eur(projetHFN)} />
               <KpiRow label="Frais de notaire" value={eur(fraisNotaire)} />
+              {fraisAgence > 0 && <KpiRow label="Frais d'agence" value={eur(fraisAgence)} />}
+              {fraisEtablissement > 0 && <KpiRow label="Frais d'établissement" value={eur(fraisEtablissement)} />}
+              {fraisExpertise > 0 && <KpiRow label="Frais d'expertise" value={eur(fraisExpertise)} />}
+              {rachatCreditCout > 0 && <KpiRow label="Rachat de crédit" value={eur(rachatCreditCout)} />}
               <KpiRow label="Frais de garantie" value={eur(fraisGarantie)} />
               <KpiRow label="Frais de dossier" value={eur(fraisDossier)} />
+              <KpiRow
+                label="Honoraires courtier"
+                value={eur(honorairesCourtier)}
+                accent={honorairesCourtier > 0 ? 'gold' : undefined}
+              />
               {subventions > 0 && <KpiRow label="Subvention(s)" value={eur(subventions)} muted />}
+              <hr className="border-navy-100 my-1" />
+              <KpiRow label="Total projet" value={eur(totalProjet)} bold />
               <hr className="border-navy-100 my-1" />
               <KpiRow label="Apport" value={eur(apport)} accent="navy" />
               <KpiRow label="Total prêts" value={eur(totalEmprunte)} accent="navy" />
