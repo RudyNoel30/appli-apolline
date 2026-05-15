@@ -477,6 +477,37 @@ export const importSimulationApi = {
   async run(dossierId: string, simulationText: string, sourceFolderPath?: string): Promise<ImportSimulationResult> {
     return request('POST', `/api/dossiers/${dossierId}/import-simulation`, { simulationText, sourceFolderPath })
   },
+  /**
+   * Variante PDF : envoie directement la DDP Cifacil (PDF) à Claude qui la lit
+   * via le document content block. Recommandé — pas besoin de skill préalable.
+   * ~5-10 secondes par import.
+   */
+  async runPdf(dossierId: string, pdfFile: File, sourceFolderPath?: string): Promise<ImportSimulationResult> {
+    const pdfBase64 = await fileToBase64(pdfFile)
+    return request('POST', `/api/dossiers/${dossierId}/import-simulation`, {
+      pdfBase64,
+      pdfFilename: pdfFile.name,
+      sourceFolderPath,
+    })
+  },
+}
+
+/**
+ * Encode un File en base64 (sans le préfixe data: URL).
+ * Utilise FileReader + slice du data URL — fonctionne dans Tauri WebView2 et
+ * en mode navigateur sans dépendance externe.
+ */
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '')
+      const comma = dataUrl.indexOf(',')
+      resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl)
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('file read failed'))
+    reader.readAsDataURL(file)
+  })
 }
 
 /* ────────────────── AI / Anthropic Claude ────────────────── */

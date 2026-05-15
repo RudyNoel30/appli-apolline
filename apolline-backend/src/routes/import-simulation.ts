@@ -21,21 +21,41 @@ importSimulationRoute.post('/dossiers/:id/import-simulation', authMiddleware, as
   if (!dossierId) {
     return c.json({ error: 'dossier id requis' }, 400)
   }
-  const body = await c.req.json().catch(() => null) as { simulationText?: string; sourceFolderPath?: string } | null
-  if (!body || typeof body.simulationText !== 'string') {
-    return c.json({ error: 'simulationText (string) requis' }, 400)
-  }
-  if (body.simulationText.length > 200_000) {
-    return c.json({ error: 'simulation trop longue (max 200 000 chars)' }, 413)
+  const body = await c.req.json().catch(() => null) as {
+    simulationText?: string
+    pdfBase64?: string
+    pdfFilename?: string
+    sourceFolderPath?: string
+  } | null
+  if (!body) {
+    return c.json({ error: 'body JSON requis' }, 400)
   }
 
-  const result = await importSimulation(dossierId, body.simulationText)
+  // Source : PDF prioritaire si fourni (DDP Cifacil directe), sinon texte
+  let source: { kind: 'text'; text: string } | { kind: 'pdf'; base64: string; filename?: string }
+  if (typeof body.pdfBase64 === 'string' && body.pdfBase64.length > 100) {
+    // Limite 32 MB base64 (~24 MB binaire) — limite Claude PDF
+    if (body.pdfBase64.length > 32 * 1024 * 1024) {
+      return c.json({ error: 'PDF trop volumineux (max ~24 MB)' }, 413)
+    }
+    source = { kind: 'pdf', base64: body.pdfBase64, filename: body.pdfFilename }
+  } else if (typeof body.simulationText === 'string' && body.simulationText.length >= 50) {
+    if (body.simulationText.length > 200_000) {
+      return c.json({ error: 'simulation trop longue (max 200 000 chars)' }, 413)
+    }
+    source = { kind: 'text', text: body.simulationText }
+  } else {
+    return c.json({ error: 'pdfBase64 ou simulationText (string ≥ 50 chars) requis' }, 400)
+  }
+
+  const result = await importSimulation(dossierId, source)
+  const sourceTag = source.kind === 'pdf' ? `PDF${source.filename ? ` "${source.filename}"` : ''}` : 'TXT'
 
   if (result.status === 'failed') {
     audit({
       action: 'create', userId: u.sub, userEmail: u.email,
       entityType: 'pret', entityId: 'import-failed',
-      details: `import AA summary simulation échoué (dossier ${dossierId}): ${result.error}${body.sourceFolderPath ? ` (source: ${body.sourceFolderPath})` : ''}`,
+      details: `import simulation Cifacil ${sourceTag} échoué (dossier ${dossierId}): ${result.error}${body.sourceFolderPath ? ` (source: ${body.sourceFolderPath})` : ''}`,
       ...ctxMeta(c),
     })
     return c.json({ error: result.error, usage: result.usage }, 502)
@@ -49,7 +69,7 @@ importSimulationRoute.post('/dossiers/:id/import-simulation', authMiddleware, as
   audit({
     action: 'create', userId: u.sub, userEmail: u.email,
     entityType: 'pret', entityId: dossierId,
-    details: `import AA summary simulation → ${result.pretsCrees?.length ?? 0} prêt(s) créé(s) sur ${result.banquePortante || 'banque inconnue'} · coût ≈ ${result.usage.estimatedCostEur}€${body.sourceFolderPath ? ` (source: ${body.sourceFolderPath})` : ''}`,
+    details: `import simulation Cifacil ${sourceTag} → ${result.pretsCrees?.length ?? 0} prêt(s) créé(s) sur ${result.banquePortante || 'banque inconnue'} · coût ≈ ${result.usage.estimatedCostEur}€${body.sourceFolderPath ? ` (source: ${body.sourceFolderPath})` : ''}`,
     ...ctxMeta(c),
   })
 

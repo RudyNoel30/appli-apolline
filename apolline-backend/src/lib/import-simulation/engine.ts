@@ -84,9 +84,18 @@ const VALID_TYPES = new Set(['amortissable', 'ptz', 'action_logement', 'epargne_
 const VALID_PROFILS = new Set(['standard', 'paliers_lissage', 'in_fine', 'differe'])
 const VALID_GARANTIES = new Set(['credit_logement', 'saccef', 'casden', 'hypotheque', 'ppd', 'caution_autre', 'nantissement', 'autre'])
 
+/**
+ * Source de la simulation : soit le texte d'un AA summary simulation.txt
+ * (déjà extrait via /dossier-extract-simulation), soit le PDF brut de la DDP
+ * Cifacil que Claude va lire directement via le document content block.
+ */
+export type ImportSimulationSource =
+  | { kind: 'text'; text: string }
+  | { kind: 'pdf'; base64: string; filename?: string }
+
 export async function importSimulation(
   dossierId: string,
-  simulationText: string,
+  source: ImportSimulationSource,
 ): Promise<ImportSimulationResult> {
   if (!client) {
     return {
@@ -94,9 +103,15 @@ export async function importSimulation(
       usage: { inputTokens: 0, outputTokens: 0, estimatedCostEur: 0 },
     }
   }
-  if (!simulationText || simulationText.trim().length < 50) {
+  if (source.kind === 'text' && (!source.text || source.text.trim().length < 50)) {
     return {
       status: 'failed', error: 'Simulation vide ou trop courte',
+      usage: { inputTokens: 0, outputTokens: 0, estimatedCostEur: 0 },
+    }
+  }
+  if (source.kind === 'pdf' && (!source.base64 || source.base64.length < 100)) {
+    return {
+      status: 'failed', error: 'PDF vide ou invalide',
       usage: { inputTokens: 0, outputTokens: 0, estimatedCostEur: 0 },
     }
   }
@@ -115,14 +130,30 @@ export async function importSimulation(
   }
 
   try {
+    // Construit le content multipart : texte simple OU bloc document PDF.
+    // Claude Opus 4.7 supporte les PDF directement (max 32 MB / 100 pages).
+    const userContent = source.kind === 'text'
+      ? `Voici le contenu intégral du fichier AA summary simulation.txt :\n\n\`\`\`\n${source.text}\n\`\`\`\n\nExtrais le plan de financement et produis le JSON conforme au schéma Apolline.`
+      : [
+          {
+            type: 'document' as const,
+            source: {
+              type: 'base64' as const,
+              media_type: 'application/pdf' as const,
+              data: source.base64,
+            },
+          },
+          {
+            type: 'text' as const,
+            text: `Voici la DDP Cifacil${source.filename ? ` (${source.filename})` : ''} contenant le plan de financement. Lis-la directement et extrais tous les prêts du tableau "Détail du plan de financement" puis les frais (notaire, garantie, courtage…) si présents. Produis le JSON conforme au schéma Apolline.`,
+          },
+        ]
+
     const res = await client.messages.create({
       model: IMPORT_MODEL,
       max_tokens: 8000,
       system: IMPORT_SIMULATION_PROMPT,
-      messages: [{
-        role: 'user',
-        content: `Voici le contenu intégral du fichier AA summary simulation.txt :\n\n\`\`\`\n${simulationText}\n\`\`\`\n\nExtrais le plan de financement et produis le JSON conforme au schéma Apolline.`,
-      }],
+      messages: [{ role: 'user', content: userContent as never }],
     })
 
     const block = res.content[0]

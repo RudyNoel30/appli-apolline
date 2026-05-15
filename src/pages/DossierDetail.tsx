@@ -1409,18 +1409,31 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
   const [planOpen, setPlanOpen] = useState(false)
   const [importSimOpen, setImportSimOpen] = useState(false)
   const [importSimText, setImportSimText] = useState('')
+  const [importSimPdf, setImportSimPdf] = useState<File | null>(null)
+  const [importSimMode, setImportSimMode] = useState<'pdf' | 'text'>('pdf')
   const [importingSim, setImportingSim] = useState(false)
 
   const handleImportSimulation = async () => {
-    const txt = importSimText.trim()
-    if (txt.length < 50) {
-      toast.error('Texte trop court — colle le contenu intégral du AA summary simulation.txt')
-      return
-    }
     setImportingSim(true)
-    const t = toast.loading('Analyse du plan de financement Cifacil…')
+    const t = toast.loading(importSimMode === 'pdf'
+      ? `Analyse de ${importSimPdf?.name ?? 'la DDP'} par Claude Opus…`
+      : 'Analyse du plan de financement Cifacil…')
     try {
-      const res = await importSimulationApi.run(dossier.id, txt)
+      let res: import('@/db/api').ImportSimulationResult
+      if (importSimMode === 'pdf') {
+        if (!importSimPdf) {
+          toast.error('Sélectionne d\'abord un PDF Cifacil', { id: t })
+          return
+        }
+        res = await importSimulationApi.runPdf(dossier.id, importSimPdf)
+      } else {
+        const txt = importSimText.trim()
+        if (txt.length < 50) {
+          toast.error('Texte trop court — colle le contenu intégral du AA summary simulation.txt', { id: t })
+          return
+        }
+        res = await importSimulationApi.run(dossier.id, txt)
+      }
       toast.success(`${res.pretsCrees.length} prêt(s) importé(s)`, {
         id: t,
         description: `${res.banquePortante || 'banque inconnue'} · ${res.usage.estimatedCostEur.toFixed(3)} €`,
@@ -1429,6 +1442,7 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
       const { sync } = await import('@/db/api')
       await sync.pullAll().catch(() => { /* silencieux */ })
       setImportSimText('')
+      setImportSimPdf(null)
       setImportSimOpen(false)
     } catch (e) {
       toast.error('Échec de l\'import', { id: t, description: e instanceof Error ? e.message : String(e) })
@@ -1660,35 +1674,90 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
         size="lg"
       >
         <div className="space-y-4">
-          <div className="text-sm text-navy-700">
-            Colle ci-dessous le contenu intégral du fichier
-            <code className="mx-1 px-1.5 py-0.5 bg-navy-50 rounded text-xs font-mono">AA summary simulation.txt</code>
-            produit par le skill <code className="text-xs font-mono">/dossier-extract-simulation</code> sur OneDrive.
-            Apolline analyse la section §0.1 (plan de financement détaillé) et crée automatiquement
-            les prêts du dossier.
+          {/* Toggle mode */}
+          <div className="inline-flex rounded-lg border border-navy-200 p-0.5 bg-navy-50">
+            <button type="button"
+              onClick={() => setImportSimMode('pdf')}
+              disabled={importingSim}
+              className={cn(
+                'px-3 py-1.5 text-xs font-medium rounded-md transition',
+                importSimMode === 'pdf' ? 'bg-white shadow-sm text-navy-900' : 'text-navy-500 hover:text-navy-700',
+              )}>
+              <FileText className="h-3.5 w-3.5 inline mr-1" /> DDP Cifacil (PDF) — recommandé
+            </button>
+            <button type="button"
+              onClick={() => setImportSimMode('text')}
+              disabled={importingSim}
+              className={cn(
+                'px-3 py-1.5 text-xs font-medium rounded-md transition',
+                importSimMode === 'text' ? 'bg-white shadow-sm text-navy-900' : 'text-navy-500 hover:text-navy-700',
+              )}>
+              Texte (AA summary simulation.txt)
+            </button>
           </div>
-          <textarea
-            className="w-full rounded-md border border-navy-200 px-3 py-2 font-mono text-xs text-navy-900 placeholder:text-navy-400 focus:outline-none focus:ring-2 focus:ring-gold-500/40 focus:border-gold-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            rows={14}
-            placeholder="§0 BANQUE PORTANT LE DOSSIER : CEBFC&#10;§0.1 PLAN DE FINANCEMENT DÉTAILLÉ&#10;| # | Type | Montant | Taux | Durée | Mensualité | Nature |&#10;..."
-            value={importSimText}
-            onChange={(e) => setImportSimText(e.target.value)}
-            disabled={importingSim}
-          />
-          <div className="flex items-center justify-between text-xs text-navy-500">
-            <span>{importSimText.length} caractères</span>
-            {prets.length > 0 && (
-              <span className="text-amber-700 inline-flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" />
-                {prets.length} prêt(s) déjà présent(s) — les nouveaux seront ajoutés à la suite
-              </span>
-            )}
-          </div>
+
+          {importSimMode === 'pdf' ? (
+            <>
+              <div className="text-sm text-navy-700">
+                Sélectionne directement la DDP Cifacil au format PDF (ex.
+                <code className="mx-1 px-1.5 py-0.5 bg-navy-50 rounded text-xs font-mono">P0 - CIFACIL R1.pdf</code>
+                ). Claude Opus 4.7 va la lire et extraire automatiquement les prêts, frais et garanties.
+              </div>
+              <label className="block">
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(e) => setImportSimPdf(e.target.files?.[0] ?? null)}
+                  disabled={importingSim}
+                  className="block w-full text-sm text-navy-700
+                    file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0
+                    file:bg-gold-100 file:text-gold-800 file:font-medium
+                    hover:file:bg-gold-200 file:cursor-pointer
+                    disabled:opacity-50"
+                />
+              </label>
+              {importSimPdf && (
+                <div className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800 flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="font-medium">{importSimPdf.name}</span>
+                  <span className="text-emerald-600">· {(importSimPdf.size / 1024).toFixed(0)} Ko</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="text-sm text-navy-700">
+                Colle ci-dessous le contenu intégral du fichier
+                <code className="mx-1 px-1.5 py-0.5 bg-navy-50 rounded text-xs font-mono">AA summary simulation.txt</code>
+                produit par le skill <code className="text-xs font-mono">/dossier-extract-simulation</code> sur OneDrive.
+              </div>
+              <textarea
+                className="w-full rounded-md border border-navy-200 px-3 py-2 font-mono text-xs text-navy-900 placeholder:text-navy-400 focus:outline-none focus:ring-2 focus:ring-gold-500/40 focus:border-gold-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                rows={12}
+                placeholder="§0 BANQUE PORTANT LE DOSSIER : CEBFC&#10;§0.1 PLAN DE FINANCEMENT DÉTAILLÉ&#10;| # | Type | Montant | Taux | Durée | Mensualité | Nature |&#10;..."
+                value={importSimText}
+                onChange={(e) => setImportSimText(e.target.value)}
+                disabled={importingSim}
+              />
+              <div className="text-xs text-navy-500">{importSimText.length} caractères</div>
+            </>
+          )}
+
+          {prets.length > 0 && (
+            <div className="text-xs text-amber-700 inline-flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              {prets.length} prêt(s) déjà présent(s) — les nouveaux seront ajoutés à la suite
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2 border-t border-navy-100">
             <button className="btn-outline text-sm" onClick={() => setImportSimOpen(false)} disabled={importingSim}>
               Annuler
             </button>
-            <button className="btn-gold text-sm" onClick={handleImportSimulation} disabled={importingSim || importSimText.trim().length < 50}>
+            <button className="btn-gold text-sm" onClick={handleImportSimulation}
+              disabled={importingSim
+                || (importSimMode === 'pdf' && !importSimPdf)
+                || (importSimMode === 'text' && importSimText.trim().length < 50)}>
               {importingSim ? (
                 <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Analyse en cours…</>
               ) : (

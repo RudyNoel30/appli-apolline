@@ -17,7 +17,17 @@
 
 export const IMPORT_SIMULATION_PROMPT = `Tu es un expert courtier IOBSP qui prépare l'import d'un plan de financement Cifacil dans Extr'Apol.
 
-Tu reçois en input le contenu intégral d'un fichier "AA summary simulation.txt" produit par notre skill /dossier-extract-simulation. Tu extrais UNIQUEMENT les prêts du plan de financement (section §0.1 PLAN DE FINANCEMENT DÉTAILLÉ + frais détaillés §0.3 si présents) et tu produis un JSON conforme au schéma Apolline.
+Tu reçois en input SOIT :
+  - le contenu d'un fichier "AA summary simulation.txt" produit par notre skill /dossier-extract-simulation (sections §0.1 PLAN DE FINANCEMENT DÉTAILLÉ + §0.3 frais + §0.4 taux global)
+  - SOIT directement la DDP Cifacil (PDF) — typiquement un fichier "P0 - CIFACIL R0.pdf" ou "P0 - CIFACIL R1.pdf" contenant le détail du plan de financement, les prêts proposés, les frais, etc.
+
+Tu extrais UNIQUEMENT les prêts du plan de financement et tu produis un JSON conforme au schéma Apolline.
+
+Repères pour parser une DDP Cifacil PDF :
+  - "Plan de financement" / "Détail du plan de financement" → tableau des prêts (Type, Montant, Taux, Durée, Mensualité, Nature/Profil)
+  - "Conditions financières" / "Frais bancaires" → frais dossier, frais garantie
+  - "Taux global" / "TAEG" → ignorer (recalculé par Apolline)
+  - "Honoraires Cifacil" / "Frais de courtage" → commission à mettre sur le prêt principal
 
 ═══════════════════════════════════════════════════════════════════════════════
 FORMAT DE SORTIE — JSON STRICT, rien d'autre :

@@ -66,7 +66,8 @@ type DetectedExtract = {
   hint: string            // 1ère ligne descriptive du fichier
   cible?: string          // cible immobilière si extractible
   piecesPaths: string[]   // chemins de toutes les pièces (PDFs, images, etc.) du dossier
-  simulationPath?: string // chemin AA summary simulation.txt si présent (plan financement Cifacil)
+  simulationPath?: string // chemin AA summary simulation.txt si présent (texte pré-extrait)
+  cifacilPdfPath?: string // chemin direct vers la DDP Cifacil (PDF) — préféré si présent
   existing?: { id: string; ref: string }  // dossier déjà importé (matche par client nom)
 }
 
@@ -148,6 +149,42 @@ async function findSimulationFile(folderPath: string): Promise<string | undefine
     /* ignore */
   }
   return undefined
+}
+
+/**
+ * Cherche la DDP Cifacil PDF dans le dossier (récursivement). Pattern attendu :
+ * "P0 - CIFACIL R0.pdf", "P0 - CIFACIL R1.pdf" ou tout autre fichier dont le
+ * nom contient "cifacil" et l'extension .pdf. Préféré au .txt car analysé
+ * directement par Claude Vision sans skill préalable.
+ */
+async function findCifacilPdf(folderPath: string, maxDepth = 3): Promise<string | undefined> {
+  const { readDir } = await import('@tauri-apps/plugin-fs')
+  type Entry = { name?: string; isDirectory?: boolean; isFile?: boolean }
+  // Priorité aux R1 > R0 > tout autre Cifacil
+  const candidates: { path: string; score: number }[] = []
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth) return
+    let entries: Entry[]
+    try { entries = await readDir(dir) as Entry[] } catch { return }
+    for (const e of entries) {
+      if (!e.name) continue
+      const full = `${dir}\\${e.name}`
+      if (e.isFile) {
+        const lower = e.name.toLowerCase()
+        if (lower.endsWith('.pdf') && lower.includes('cifacil')) {
+          // R1 (rdv 1, plan finalisé) > R0 (premier appel) > autre
+          const score = lower.includes('r1') ? 3 : lower.includes('r0') ? 2 : 1
+          candidates.push({ path: full, score })
+        }
+      } else if (e.isDirectory) {
+        await walk(full, depth + 1)
+      }
+    }
+  }
+  await walk(folderPath, 0)
+  if (candidates.length === 0) return undefined
+  candidates.sort((a, b) => b.score - a.score)
+  return candidates[0]?.path
 }
 
 /**
@@ -264,12 +301,15 @@ export default function ImportOneDrive() {
         // — récursif jusqu'à 4 niveaux, exclut les fichiers techniques.
         const piecesPaths = await listPiecesInFolder(folderPath)
 
-        // Détecte un plan de financement Cifacil (AA summary simulation.txt) côte à côte
-        const simulationPath = await findSimulationFile(folderPath)
+        // Détecte un plan de financement Cifacil :
+        //   1. PDF direct (P0 - CIFACIL R1.pdf, recommandé) ← préféré
+        //   2. sinon fichier texte AA summary simulation.txt (déjà extrait)
+        const cifacilPdfPath = await findCifacilPdf(folderPath)
+        const simulationPath = cifacilPdfPath ? undefined : await findSimulationFile(folderPath)
 
         // Match dossier existant : par nom client extrait du folderName
         const existing = matchExistingDossier(folderName, hint, dossiers)
-        detected.push({ filePath, folderPath, folderName, hint, cible, piecesPaths, simulationPath, existing })
+        detected.push({ filePath, folderPath, folderName, hint, cible, piecesPaths, simulationPath, cifacilPdfPath, existing })
       }
 
       setExtracts(detected)
@@ -304,14 +344,24 @@ export default function ImportOneDrive() {
           description: `${res.ref}${res.legacyId ? ` · legacy ${res.legacyId}` : ''} · ${res.fieldsImported} champs · ${res.usage.estimatedCostEur.toFixed(3)} €`,
         })
 
-        // 2bis. Si un AA summary simulation.txt est présent, importe le plan de
-        // financement Cifacil → crée les prêts en BDD.
-        if (ex.simulationPath) {
-          const simToast = toast.loading(`Import du plan de financement Cifacil de ${ex.folderName}…`)
+        // 2bis. Import du plan de financement Cifacil → crée les prêts en BDD.
+        // Préférence : PDF direct > AA summary simulation.txt (skill déjà passé).
+        if (ex.cifacilPdfPath || ex.simulationPath) {
+          const isPdf = !!ex.cifacilPdfPath
+          const sourceLabel = isPdf
+            ? ex.cifacilPdfPath!.split(/[\\/]/).pop() ?? 'CIFACIL.pdf'
+            : 'AA summary simulation.txt'
+          const simToast = toast.loading(`Import Cifacil ${sourceLabel} (${ex.folderName})…`)
           try {
-            const { readTextFile } = await import('@tauri-apps/plugin-fs')
-            const simText = await readTextFile(ex.simulationPath)
-            const simRes = await importSimulationApi.run(res.dossierId, simText, ex.folderPath)
+            let simRes: import('@/db/api').ImportSimulationResult
+            if (isPdf) {
+              const pdfFile = await readAsBrowserFile(ex.cifacilPdfPath!)
+              simRes = await importSimulationApi.runPdf(res.dossierId, pdfFile, ex.folderPath)
+            } else {
+              const { readTextFile } = await import('@tauri-apps/plugin-fs')
+              const simText = await readTextFile(ex.simulationPath!)
+              simRes = await importSimulationApi.run(res.dossierId, simText, ex.folderPath)
+            }
             toast.success(`${simRes.pretsCrees.length} prêt(s) Cifacil importé(s)`, {
               id: simToast,
               description: `${simRes.banquePortante || 'banque inconnue'} · ${simRes.usage.estimatedCostEur.toFixed(3)} €`,
@@ -541,11 +591,13 @@ export default function ImportOneDrive() {
                           {e.piecesPaths.length} pièce{e.piecesPaths.length > 1 ? 's' : ''} à importer
                         </span>
                       )}
-                      {e.simulationPath && (
+                      {(e.cifacilPdfPath || e.simulationPath) && (
                         <span className="text-[11px] text-gold-700 inline-flex items-center gap-1 bg-gold-50 border border-gold-200 rounded px-1.5 py-0.5"
-                          title="Plan de financement Cifacil détecté — les prêts seront importés automatiquement">
+                          title={e.cifacilPdfPath
+                            ? `DDP Cifacil PDF détectée (${e.cifacilPdfPath.split(/[\\/]/).pop()}) — les prêts seront importés automatiquement`
+                            : 'AA summary simulation.txt détecté — les prêts seront importés automatiquement'}>
                           <Sparkles className="h-3 w-3" />
-                          Plan financement Cifacil
+                          {e.cifacilPdfPath ? 'DDP Cifacil PDF' : 'Plan financement Cifacil'}
                         </span>
                       )}
                     </div>
