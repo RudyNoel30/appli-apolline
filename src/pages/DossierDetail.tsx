@@ -1530,9 +1530,11 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
           })()} />
           <Field label="Mensualité totale (av. ass.)" value={eur(mensualiteTotale)} />
           <Field label="Durée max" value={dureeMaxMois > 0 ? `${(dureeMaxMois / 12).toFixed(1)} ans` : '—'} />
+          {/* Tolérance ≤ 1€ : les arrondis import Cifacil vs barème notaire
+              peuvent produire un écart cosmétique d'1€. Affiché 'Équilibre'. */}
           <Field
-            label={ecart === 0 ? 'Équilibre' : ecart > 0 ? 'Surplus' : 'Manque'}
-            value={eur(Math.abs(ecart))}
+            label={Math.abs(ecart) <= 1 ? 'Équilibre' : ecart > 0 ? 'Surplus' : 'Manque'}
+            value={Math.abs(ecart) <= 1 ? eur(0) : eur(Math.abs(ecart))}
           />
           <Field label="Coût total crédit" value={eur(coutTotalCredit)} />
         </div>
