@@ -344,15 +344,32 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
   }
 
   if (mode === 'amortissement') {
-    // Tableau d'amortissement visualisé : pour chaque mois, on empile la part
-    // capital (en bas, navy) et la part intérêts (au-dessus, gold). La hauteur
-    // totale = mensualité du mois. Au début, intérêts dominent ; en fin de
-    // prêt, c'est l'inverse — c'est exactement la signature visuelle d'un
-    // tableau d'amortissement classique.
+    // Tableau d'amortissement visualisé du foyer : pour chaque mois, on empile
+    // la part capital de CHAQUE prêt (une couleur par prêt, comme dans la vue
+    // KRD) + une couche d'intérêts agrégés au sommet en gold. Hauteur totale =
+    // mensualité totale du mois. Au début, intérêts dominent ; en fin de plan,
+    // c'est le capital qui domine — signature visuelle d'un tableau classique.
     return (
       <div style={wrapperStyle}>
         <ResponsiveContainer width="100%" height="100%" debounce={1}>
           <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+            <defs>
+              {/* Gradient gold pour les intérêts (visuellement distinct des capitaux) */}
+              <linearGradient id="amortInteretGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#E5C77B" stopOpacity={0.95} />
+                <stop offset="100%" stopColor="#A4823F" stopOpacity={0.95} />
+              </linearGradient>
+              {/* Un gradient par prêt — clair en haut, sombre en bas */}
+              {sorted.map((p) => {
+                const c = colorByPret[p.id]
+                return (
+                  <linearGradient key={p.id} id={`amortCapGrad_${p.id}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={lighten(c, 0.12)} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={darken(c, 0.18)} stopOpacity={1} />
+                  </linearGradient>
+                )
+              })}
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
             <XAxis
               dataKey="mois"
@@ -371,9 +388,13 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
             <Tooltip
               labelFormatter={(m) => `Mois ${m} (~${(m / 12).toFixed(1)} ans)`}
               formatter={(value: number, name: string) => {
-                if (name === 'totalCapital') return [formatEuro(value), 'Part capital']
-                if (name === 'totalInteret') return [formatEuro(value), 'Part intérêts']
+                if (name === 'totalInteret') return [formatEuro(value), 'Intérêts (tous prêts)']
                 if (name === 'total') return [formatEuro(value), 'Échéance totale']
+                if (name.startsWith('capital_')) {
+                  const id = name.replace('capital_', '')
+                  const p = sorted.find((x) => x.id === id)
+                  if (p) return [formatEuro(value), `Capital ${p.libelle ?? PRET_TYPE_LABEL[p.type]}`]
+                }
                 return [formatEuro(value), name]
               }}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}
@@ -383,31 +404,38 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               height={32}
               iconType="square"
               payload={[
-                { value: 'Part intérêts', type: 'square', color: '#C9A961' },
-                { value: 'Part capital', type: 'square', color: '#0A1F3D' },
+                ...sorted.map((p) => ({
+                  value: `Capital ${p.libelle ?? PRET_TYPE_LABEL[p.type]}`,
+                  type: 'square' as const,
+                  color: colorByPret[p.id] ?? '#0A1F3D',
+                })),
+                { value: 'Intérêts', type: 'square' as const, color: '#C9A961' },
               ]}
             />
-            {/* Intérêts en bas (gold) — dominent au début, diminuent dans le temps */}
+            {/* Capital par prêt — un Area stacké par prêt (couleur prêt) */}
+            {sorted.map((p) => (
+              <Area
+                key={p.id}
+                type="monotone"
+                dataKey={`capital_${p.id}`}
+                stackId="ech"
+                stroke={darken(colorByPret[p.id] ?? '#0A1F3D', 0.25)}
+                fill={`url(#amortCapGrad_${p.id})`}
+                fillOpacity={1}
+                strokeWidth={1}
+                name={`capital_${p.id}`}
+              />
+            ))}
+            {/* Intérêts agrégés au sommet (gold) — dominent au début, fondent ensuite */}
             <Area
               type="monotone"
               dataKey="totalInteret"
               stackId="ech"
-              stroke="#C9A961"
-              fill="#C9A961"
-              fillOpacity={0.85}
+              stroke="#92704A"
+              fill="url(#amortInteretGrad)"
+              fillOpacity={1}
               strokeWidth={1}
               name="totalInteret"
-            />
-            {/* Capital au-dessus (navy plein) — croît à mesure que la dette se réduit */}
-            <Area
-              type="monotone"
-              dataKey="totalCapital"
-              stackId="ech"
-              stroke="#0A1F3D"
-              fill="#0A1F3D"
-              fillOpacity={0.85}
-              strokeWidth={1}
-              name="totalCapital"
             />
           </AreaChart>
         </ResponsiveContainer>
