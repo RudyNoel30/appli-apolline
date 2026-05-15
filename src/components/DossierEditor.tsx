@@ -186,10 +186,12 @@ export default function DossierEditor({
   // passe à false et le champ devient "figé" sur la saisie manuelle.
   // Un bouton ↻ "Recalculer" permet de revenir au mode auto.
   const [autoFraisNotaire, setAutoFraisNotaire] = useState(() => {
-    // Au boot, on est en mode auto SAUF si le dossier avait déjà des frais
-    // explicitement renseignés qui divergent de l'estimation auto (= saisie manuelle).
-    if ((dossier.fraisNotaire ?? 0) === 0) return true
-    return true  // par défaut : on respecte la valeur stockée mais on reste en mode auto
+    // Mode AUTO seulement si le dossier n'a pas encore de frais notaire stockés
+    // (nouveau dossier ou champ vidé). Sinon mode MANUEL pour préserver ce que
+    // l'utilisateur avait saisi — sinon le useEffect plus bas écraserait la
+    // valeur à chaque réouverture du dossier (bug reporté).
+    // L'utilisateur peut toujours cliquer sur "↻ Recalculer" pour repasser en auto.
+    return (dossier.fraisNotaire ?? 0) === 0
   })
 
   useEffect(() => {
@@ -204,27 +206,46 @@ export default function DossierEditor({
   // quand : coutLogement, typeAchat, ou villeBien change ET mode auto activé
   useEffect(() => {
     if (!autoFraisNotaire) return
-    const prix = s.coutLogement || 0
-    if (prix <= 0) return
 
-    // Mapping TypeAchat (libellé FR) → nature notaire interne
+    // Mapping TypeAchat (libellé FR) → nature notaire + assiette à utiliser.
+    // RÈGLES :
+    //   - Rachat de crédit / Travaux pur     → 0 € (pas d'acquisition)
+    //   - Construction (terrain + travaux)   → DMTO sur le TERRAIN seulement
+    //   - VEFA / Neuf                        → TVA déjà payée, DMTO 0,715 %
+    //   - Ancien / Terrain                   → DMTO 5,80 % (4,91 % en 36/976)
     const t = (s.typeAchat ?? '').toLowerCase()
     let nature: NatureBienNotaire | null = null
+    let assiette = s.coutLogement || 0
+
+    if (t === 'rachat' || t === 'travaux') {
+      // Pas d'acquisition immobilière → frais notaire = 0
+      if (s.fraisNotaire !== 0) setS((p) => ({ ...p, fraisNotaire: 0 }))
+      return
+    }
     if (t === 'neuf') nature = 'neuf'
     else if (t === 'vefa') nature = 'vefa'
     else if (t === 'terrain') nature = 'terrain'
-    else if (t === 'ancien' || t === 'rachat' || t === 'travaux' || t === 'construction') nature = 'ancien'
-    if (!nature) return
+    else if (t === 'construction') {
+      // Construction = achat terrain + travaux. DMTO uniquement sur le terrain.
+      // Fallback : si coutTerrain n'est pas renseigné, on ne calcule pas (l'user
+      // devra saisir manuellement) pour éviter de surévaluer en appliquant 5,80 %
+      // sur le coût total.
+      if ((s.coutTerrain ?? 0) <= 0) return
+      nature = 'terrain'
+      assiette = s.coutTerrain
+    }
+    else if (t === 'ancien') nature = 'ancien'
+    if (!nature || assiette <= 0) return
 
     // Détecte le département via le code postal dans villeBien (ex: "21000 DIJON")
     const cpMatch = (s.villeBien ?? '').match(/\b(\d{5})\b/)
     const departement = cpMatch ? (cpMatch[1]!.startsWith('976') ? '976' : cpMatch[1]!.slice(0, 2)) : undefined
 
-    const fn = calcFraisNotaireDetail(prix, nature, { departement }).total
+    const fn = calcFraisNotaireDetail(assiette, nature, { departement }).total
     if (fn !== s.fraisNotaire) {
       setS((p) => ({ ...p, fraisNotaire: fn }))
     }
-  }, [autoFraisNotaire, s.coutLogement, s.typeAchat, s.villeBien, s.fraisNotaire])
+  }, [autoFraisNotaire, s.coutLogement, s.coutTerrain, s.typeAchat, s.villeBien, s.fraisNotaire])
   const updateE1 = <K extends keyof Emprunteur>(k: K, v: Emprunteur[K]) =>
     setS((p) => ({ ...p, emprunteur1: { ...p.emprunteur1, [k]: v } }))
   const updateE2 = <K extends keyof Emprunteur>(k: K, v: Emprunteur[K]) =>

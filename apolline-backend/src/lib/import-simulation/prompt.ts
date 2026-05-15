@@ -103,9 +103,16 @@ RÈGLES PRÉCISES :
 9. **Paliers lissage** :
    - Si "Prêt modulable" ou "Palier 1 : X €/mois pendant Y mois, puis palier 2 : Z €/mois pendant W mois" est mentionné dans §0.1, mets profilAmortissement="paliers_lissage" et la mensualité utilisée = celle du PREMIER palier (Apolline gère les paliers via un sous-objet séparé, à éditer après l'import).
 
-10. **Commission courtage** :
-    - Si §0.3 mentionne "Frais de courtage XXXX € TTC" → mettre sur le prêt principal (rang 1)
-    - Sinon : commission = 0
+10. **Commission courtage (honoraires courtier)** :
+    - Extrais le montant tel qu'il apparaît dans la DDP — c'est le montant signé
+      contractuellement (souvent affiché "Honoraires de courtage : X €" en
+      bas du plan de financement ou dans une section dédiée).
+    - Si la DDP fournit à la fois HT et TTC séparément (ex. "3 000 € HT + 600 € TVA = 3 600 € TTC"),
+      utilise le TTC (c'est ce que le client paie).
+    - Si un seul montant est affiché sans précision HT/TTC, c'est en général
+      déjà le TTC (les DDP client sont rédigées TTC) — prends-le tel quel.
+    - Met le montant sur le prêt principal (rang 1).
+    - Si aucune mention de courtage dans la DDP → commission = 0 (ne JAMAIS inventer un montant par défaut).
 
 11. **Si TAEG est dans §0.4** : ignore (calculé par Apolline depuis montant + mensualité)
 

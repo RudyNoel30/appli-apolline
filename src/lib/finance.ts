@@ -156,11 +156,17 @@ export function calcFraisNotaireDetail(
   // 4. Débours et formalités — forfait
   const debours = 1_200
 
-  const total = Math.round(emoluments + dmto + csi + debours)
+  // ⚠️ Rounding consistency : on arrondit chaque composante AVANT de sommer,
+  // sinon `total` (= round(sum)) peut différer de 1€ de la somme des composantes
+  // affichées (= sum(rounded)). C'était la cause du "trou de 1€" reporté.
+  const emolumentsR = Math.round(emoluments)
+  const dmtoR = Math.round(dmto)
+  const csiR = Math.round(csi)
+  const total = emolumentsR + dmtoR + csiR + debours
   return {
-    emoluments: Math.round(emoluments),
-    dmto: Math.round(dmto),
-    csi: Math.round(csi),
+    emoluments: emolumentsR,
+    dmto: dmtoR,
+    csi: csiR,
     debours,
     total,
     tauxDmtoAppli,
@@ -273,6 +279,33 @@ export function calcTAEA(
  */
 export function fraisInitiauxTAEG(pret: Pret): number {
   return (pret.fraisDossier ?? 0) + (pret.fraisBanque ?? 0) + (pret.garantieMontant ?? 0)
+}
+
+/**
+ * Calcul LTV bancaire (Loan-to-Value) — convention Groupe Apolline :
+ *
+ *   LTV = Σ prêts BANCAIRES / Valeur du bien
+ *
+ * — PTZ et Action Logement EXCLUS du numérateur : ce sont des prêts assimilés
+ *   à un apport pour la négociation banque (0 % d'intérêt, assimilation HCSF).
+ * — Dénominateur = coutLogement (préféré) ou à défaut montantBien.
+ *
+ * Retourne un ratio entre 0 et 1+ (ex: 0.85 = 85 %) ou 0 si pas calculable.
+ *
+ * Le type "loose" sur dossier permet d'appeler avec un dossier partiel (Saisie
+ * ou DossierEditor) sans avoir à reconstituer l'objet complet.
+ */
+export function computeLtvBancaire(
+  prets: Pret[],
+  dossier: { coutLogement?: number; montantBien?: number },
+): number {
+  const valeur = (dossier.coutLogement ?? 0) || (dossier.montantBien ?? 0)
+  if (valeur <= 0) return 0
+  const bancaire = prets.reduce((s, p) => {
+    if (p.type === 'ptz' || p.type === 'action_logement') return s
+    return s + (p.montant ?? 0)
+  }, 0)
+  return bancaire / valeur
 }
 
 /**

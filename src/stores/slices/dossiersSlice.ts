@@ -27,7 +27,11 @@ export const createDossiersSlice: StateCreator<Store, [], [], DossiersSlice> = (
     const year = new Date().getFullYear()
     const state = get()
     const count = state.dossiers.length + 1
-    const ltv = d.ltv ?? (d.montantBien > 0 ? d.montantPret / d.montantBien : 0)
+    // Fallback LTV à la création — utilise coutLogement (préféré) puis montantBien.
+    // ⚠️ Cette valeur est un snapshot — la LTV "vraie" est recalculée live dans
+    // DossierDetail via computeLtvBancaire (qui exclut PTZ + Action Logement).
+    const valeurBien = (d.coutLogement ?? 0) || (d.montantBien ?? 0)
+    const ltv = d.ltv ?? (valeurBien > 0 ? d.montantPret / valeurBien : 0)
     const hcsfOk = d.hcsfOk ?? (ltv <= 1.0 && d.dureeMois <= 300)
     const newD: Dossier = {
       ...d,

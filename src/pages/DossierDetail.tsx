@@ -10,7 +10,7 @@ import FactureFormModal from '@/components/FactureFormModal'
 import StatusBadge from '@/components/StatusBadge'
 import { factures as facturesApi, type Facture, pieces as piecesApi, auditDossier as auditDossierApi, type AuditDossierResult, importSimulationApi } from '@/db/api'
 import AuditDossierModal from '@/components/AuditDossierModal'
-import { effectiveMensualite, calcTAEG, calcTAEA, calcFraisNotaireDetail } from '@/lib/finance'
+import { effectiveMensualite, calcTAEG, calcTAEA, calcFraisNotaireDetail, computeLtvBancaire } from '@/lib/finance'
 import type { NatureBienNotaire } from '@/lib/finance'
 import PlanFinancementModal from '@/components/PlanFinancementModal'
 import OffresComparateur from '@/components/OffresComparateur'
@@ -124,9 +124,9 @@ export default function DossierDetail() {
   const liveTotalEmprunte = dossierPrets.reduce((s, p) => s + (p.montant ?? 0), 0)
   const liveMensualiteTotale = dossierPrets.reduce((s, p) => s + effectiveMensualite(p).totale, 0)
   const liveDureeMaxMois = dossierPrets.reduce((m, p) => Math.max(m, p.dureeMois ?? 0), 0)
-  const liveLtv = (dossier?.montantBien ?? 0) > 0
-    ? liveTotalEmprunte / (dossier?.montantBien ?? 1)
-    : 0
+  // LTV bancaire = (prêts hors PTZ/Action Logement) / coût logement
+  // — voir computeLtvBancaire pour la convention Groupe Apolline
+  const liveLtv = computeLtvBancaire(dossierPrets, dossier ?? { coutLogement: 0, montantBien: 0 })
 
   // Revenus mensuels nets du foyer (rfMenage est annuel)
   const liveRevenusMensuels = ((dossier?.rfMenage ?? 0) / 12)
@@ -1524,7 +1524,10 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
           <Field label="Coût opération" value={eur(coutOperation)} />
           <Field label="Apport personnel" value={eur(dossier.apport)} />
           <Field label="Total emprunté" value={eur(totalEmprunte)} />
-          <Field label="LTV" value={dossier.montantBien > 0 ? pct(totalEmprunte / dossier.montantBien, 0) : '—'} />
+          <Field label="LTV bancaire" value={(() => {
+            const ltv = computeLtvBancaire(prets, dossier)
+            return ltv > 0 ? pct(ltv, 0) : '—'
+          })()} />
           <Field label="Mensualité totale (av. ass.)" value={eur(mensualiteTotale)} />
           <Field label="Durée max" value={dureeMaxMois > 0 ? `${(dureeMaxMois / 12).toFixed(1)} ans` : '—'} />
           <Field
