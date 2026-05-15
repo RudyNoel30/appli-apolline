@@ -443,7 +443,7 @@ export type PretStatut =
   | 'refuse'
   | 'abandonne'
 
-export type GarantieType = 'credit_logement' | 'hypotheque' | 'ppd' | 'caution_autre' | 'nantissement' | 'autre'
+export type GarantieType = 'credit_logement' | 'saccef' | 'casden' | 'hypotheque' | 'ppd' | 'caution_autre' | 'nantissement' | 'autre'
 
 /** Ligne d'assurance (1 prêt peut avoir plusieurs lignes — emprunteur + co-emprunteur). */
 export type PretAssurance = {
@@ -558,6 +558,8 @@ export const PRET_STATUT_LABEL: Record<PretStatut, string> = {
 
 export const GARANTIE_LABEL: Record<GarantieType, string> = {
   credit_logement: 'Crédit Logement',
+  saccef: 'SACCEF (Caisse d\'Épargne)',
+  casden: 'CASDEN (Banque Populaire)',
   hypotheque: 'Hypothèque',
   ppd: 'PPD (Privilège du prêteur)',
   caution_autre: 'Caution autre organisme',

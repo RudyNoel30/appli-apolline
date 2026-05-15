@@ -153,6 +153,8 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
     "profession": "string",
     "typeContrat": "CDI|CDD|Période d'essai|Fonctionnaire|Indépendant|Gérant majoritaire|Profession libérale|Retraité|Sans emploi|Étudiant",
     "employeur": "string",
+    "adresseEmployeur": "string ou '' — adresse complète de l'employeur (ex: '5 rue Alexandre Yersin, 39100 DOLE')",
+    "siretEmployeur": "string ou '' — SIRET sur 14 chiffres",
     "dateEmbauche": "YYYY-MM-DD ou ''",
     "anciennete": number,
     "secteur": "string",

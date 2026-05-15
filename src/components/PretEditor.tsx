@@ -56,7 +56,7 @@ type Props = {
 const TYPES_ORDER: PretType[] = ['amortissable', 'ptz', 'action_logement', 'epargne_logement', 'relais', 'in_fine', 'lissage']
 const PROFILS_ORDER: PretProfilAmortissement[] = ['standard', 'paliers_lissage', 'in_fine', 'differe']
 const STATUTS_ORDER: PretStatut[] = ['propose', 'accorde', 'offre_editee', 'signe', 'refuse', 'abandonne']
-const GARANTIES_ORDER: GarantieType[] = ['credit_logement', 'hypotheque', 'ppd', 'caution_autre', 'nantissement', 'autre']
+const GARANTIES_ORDER: GarantieType[] = ['credit_logement', 'saccef', 'casden', 'hypotheque', 'ppd', 'caution_autre', 'nantissement', 'autre']
 
 type SectionKey =
   | 'identite'
@@ -747,19 +747,30 @@ function SectionPtz({ f, setF, ptzValidation, ptzAutoFilled }: {
             <ReadField label="Durée totale" value={`${ptzValidation.dureeMois / 12} ans`} />
             <ReadField label="Différé d'amortissement" value={ptzValidation.differeMois > 0 ? `${ptzValidation.differeMois / 12} ans` : 'Aucun'} />
           </div>
+
+          {/* Bouton de pré-remplissage complet : montant + durée + différé + taux 0 % */}
+          {(f.montant !== ptzValidation.montantMax || f.dureeMois !== ptzValidation.dureeMois
+            || f.differeAmortissement !== ptzValidation.differeMois || f.tauxNominal !== 0) && ptzAutoFilled && (
+            <button
+              type="button"
+              onClick={() => setF({
+                ...f,
+                montant: ptzValidation.montantMax,
+                dureeMois: ptzValidation.dureeMois,
+                differeAmortissement: ptzValidation.differeMois,
+                tauxNominal: 0,
+              })}
+              className="mt-4 w-full btn-gold text-sm justify-center"
+            >
+              <Award className="h-4 w-4" />
+              Calculer le PTZ optimal — {ptzValidation.montantMax.toLocaleString('fr-FR')} € sur {ptzValidation.dureeMois / 12} ans (différé {ptzValidation.differeMois / 12} ans)
+            </button>
+          )}
+
           {f.montant > 0 && f.montant > ptzValidation.montantMax && (
             <div className="mt-3 text-xs text-rose-700 bg-rose-100 rounded p-2">
               ⚠️ Montant saisi ({f.montant.toLocaleString('fr-FR')} €) supérieur au max PTZ ({ptzValidation.montantMax.toLocaleString('fr-FR')} €).
             </div>
-          )}
-          {f.dureeMois !== ptzValidation.dureeMois && ptzAutoFilled && (
-            <button
-              type="button"
-              onClick={() => setF({ ...f, dureeMois: ptzValidation.dureeMois, differeAmortissement: ptzValidation.differeMois, tauxNominal: 0 })}
-              className="mt-3 text-xs text-gold-700 hover:underline"
-            >
-              → Pré-remplir durée {ptzValidation.dureeMois / 12} ans + différé {ptzValidation.differeMois / 12} ans + taux 0 %
-            </button>
           )}
         </>
       )}

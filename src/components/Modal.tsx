@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -29,7 +30,10 @@ export default function Modal({ open, onClose, title, description, children, act
     xl: 'max-w-5xl',
   }
 
-  return (
+  // Portal vers document.body : la modale s'échappe de la hiérarchie React et
+  // n'est donc plus containée par les transforms persistants des ancêtres
+  // (.page, .page > *, etc.). Garantit l'affichage en plein écran partout.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-fade-in"
       onClick={onClose}
@@ -82,6 +86,7 @@ export default function Modal({ open, onClose, title, description, children, act
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

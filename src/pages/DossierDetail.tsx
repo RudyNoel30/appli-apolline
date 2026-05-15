@@ -4,16 +4,17 @@ import {
   ArrowLeft, User2, Coins, Landmark, Home, Banknote, FolderOpen, StickyNote, Sparkles,
   FileDown, FileText, Map, Calculator, CheckCircle2, AlertTriangle, XCircle, Clock,
   Trash2, Pencil, Save, UserCheck, UserMinus, Mail, MailOpen, Reply, Paperclip, RefreshCw, ExternalLink,
-  Link as LinkIcon, Download, Plus, Receipt, Eye,
+  Link as LinkIcon, Download, Plus, Receipt, Eye, Upload,
 } from 'lucide-react'
 import FactureFormModal from '@/components/FactureFormModal'
 import StatusBadge from '@/components/StatusBadge'
-import { factures as facturesApi, type Facture, pieces as piecesApi, auditDossier as auditDossierApi, type AuditDossierResult } from '@/db/api'
+import { factures as facturesApi, type Facture, pieces as piecesApi, auditDossier as auditDossierApi, type AuditDossierResult, importSimulationApi } from '@/db/api'
 import AuditDossierModal from '@/components/AuditDossierModal'
 import { effectiveMensualite, calcTAEG, calcTAEA, calcFraisNotaireDetail } from '@/lib/finance'
 import type { NatureBienNotaire } from '@/lib/finance'
 import PlanFinancementModal from '@/components/PlanFinancementModal'
 import OffresComparateur from '@/components/OffresComparateur'
+import PiecesParCategorie from '@/components/PiecesParCategorie'
 import Modal from '@/components/Modal'
 import AiPreviewModal from '@/components/AiPreviewModal'
 import DossierEditor from '@/components/DossierEditor'
@@ -476,10 +477,10 @@ export default function DossierDetail() {
           {/* key={tab} sur le wrapper → React remonte le contenu à chaque
               changement d'onglet, ce qui rejoue l'animation tab-content. */}
           <div key={tab} className="p-6 tab-content">
-            {tab === 'etatcivil' && <TabEtatCivil client={client} dossier={dossier} />}
-            {tab === 'revenus' && <TabRevenus client={client} dossier={dossier} />}
+            {tab === 'etatcivil' && <TabEtatCivil client={client} dossier={dossier} onEdit={() => setEditModal(true)} dossierId={dossier.id} />}
+            {tab === 'revenus' && <TabRevenus client={client} dossier={dossier} onEdit={() => setEditModal(true)} dossierId={dossier.id} />}
             {tab === 'patrimoine' && <TabPatrimoine dossier={dossier} client={client} onEdit={() => setEditModal(true)} />}
-            {tab === 'projet' && <TabProjet dossier={dossier} />}
+            {tab === 'projet' && <TabProjet dossier={dossier} onEdit={() => setEditModal(true)} dossierId={dossier.id} />}
             {tab === 'financement' && <TabFinancement dossier={dossier} />}
             {tab === 'pieces' && <TabPiecesLocal dossier={dossier} />}
             {tab === 'factures' && <TabFactures dossierId={dossier.id} />}
@@ -630,7 +631,7 @@ function emp<T = string>(emp: unknown, key: string): T | undefined {
   return (emp as Record<string, unknown>)[key] as T | undefined
 }
 
-function TabEtatCivil({ client, dossier }: { client: any; dossier: Dossier }) {
+function TabEtatCivil({ client, dossier, onEdit, dossierId }: { client: any; dossier: Dossier; onEdit?: () => void; dossierId: string }) {
   const e1 = dossier.emprunteur1 as Record<string, unknown> | undefined
   const e2 = dossier.emprunteur2 as Record<string, unknown> | undefined | null
 
@@ -655,6 +656,13 @@ function TabEtatCivil({ client, dossier }: { client: any; dossier: Dossier }) {
 
   return (
     <>
+      {onEdit && (
+        <div className="flex justify-end mb-3">
+          <button onClick={onEdit} className="btn-outline text-sm">
+            <Pencil className="h-3.5 w-3.5" /> Modifier l'état civil
+          </button>
+        </div>
+      )}
       <Section title="Emprunteur principal">
         <div className="grid grid-cols-4 gap-5">
           <Field label="Prénom" value={emp1Prenom} />
@@ -694,11 +702,14 @@ function TabEtatCivil({ client, dossier }: { client: any; dossier: Dossier }) {
           </div>
         </Section>
       )}
+
+      {/* Pièces P1 — identité, situation familiale */}
+      <PiecesParCategorie dossierId={dossierId} categorie="P1" />
     </>
   )
 }
 
-function TabRevenus({ client, dossier }: { client: any; dossier: Dossier }) {
+function TabRevenus({ client, dossier, onEdit, dossierId }: { client: any; dossier: Dossier; onEdit?: () => void; dossierId: string }) {
   const e1 = dossier.emprunteur1 as Record<string, unknown> | undefined
   const e2 = dossier.emprunteur2 as Record<string, unknown> | undefined | null
 
@@ -713,13 +724,52 @@ function TabRevenus({ client, dossier }: { client: any; dossier: Dossier }) {
     const rfrN1 = emp<number>(emprunteur, 'rfPersonnelN1') || 0
     const rfrN2 = emp<number>(emprunteur, 'rfPersonnelN2') || 0
 
-    // Total brut mensuel approximatif
+    // Données professionnelles (employeur, contrat, dates)
+    const profession = emp<string>(emprunteur, 'profession') || ''
+    const employeur = emp<string>(emprunteur, 'employeur') || ''
+    const typeContrat = emp<string>(emprunteur, 'typeContrat') || ''
+    const dateEmbauche = emp<string>(emprunteur, 'dateEmbauche') || ''
+    const anciennete = emp<number>(emprunteur, 'anciennete') || 0
+    const secteur = emp<string>(emprunteur, 'secteur') || ''
+    // Adresse employeur (peut être dans bienDetails / emprunteur.adresseEmployeur si extraite)
+    const adresseEmployeur = emp<string>(emprunteur, 'adresseEmployeur')
+      ?? emp<string>(emprunteur, 'adresseProfessionnelle')
+      ?? ''
+
     const baBicBncMensuel = baBicBncMois > 0 ? baBicBnc / baBicBncMois : 0
     const totalMensuel = salaire + baBicBncMensuel + rfBruts + autresRev + revSoc + pensionRecue
 
     return (
-      <div className="bg-ivory rounded-lg p-4">
-        <div className="text-xs uppercase tracking-wider font-semibold text-navy-500 mb-2">{titre}</div>
+      <div className="bg-ivory rounded-lg p-4 space-y-3">
+        <div className="text-xs uppercase tracking-wider font-semibold text-navy-500">{titre}</div>
+
+        {/* ─── Bloc Situation professionnelle ─── */}
+        {(employeur || profession || typeContrat) && (
+          <div className="rounded-lg bg-white border border-navy-100 p-3 space-y-1.5">
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-gold-700 mb-1">Situation professionnelle</div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+              {profession && <div><span className="text-navy-500">Profession :</span> <span className="text-navy-900 font-medium">{profession}</span></div>}
+              {typeContrat && <div><span className="text-navy-500">Contrat :</span> <span className="text-navy-900 font-medium">{typeContrat}</span></div>}
+              {employeur && <div className="col-span-2"><span className="text-navy-500">Employeur :</span> <span className="text-navy-900 font-medium">{employeur}</span></div>}
+              {adresseEmployeur && <div className="col-span-2"><span className="text-navy-500">Adresse :</span> <span className="text-navy-700">{adresseEmployeur}</span></div>}
+              {dateEmbauche && (
+                <div><span className="text-navy-500">Date d'embauche :</span> <span className="text-navy-900 font-medium">{dateFr(dateEmbauche)}</span></div>
+              )}
+              {anciennete > 0 && (
+                <div>
+                  <span className="text-navy-500">Ancienneté :</span>{' '}
+                  <span className="text-navy-900 font-medium">
+                    {Math.floor(anciennete / 12)} an{anciennete >= 24 ? 's' : ''}
+                    {anciennete % 12 > 0 ? ` ${anciennete % 12} mois` : ''}
+                  </span>
+                </div>
+              )}
+              {secteur && <div className="col-span-2"><span className="text-navy-500">Secteur :</span> <span className="text-navy-700">{secteur}</span></div>}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Bloc Revenus ─── */}
         <table className="w-full text-sm">
           <tbody className="divide-y divide-navy-100">
             <tr><td className="py-2">Salaire net mensuel</td><td className="py-2 text-right font-mono">{eur(salaire)}</td></tr>
@@ -755,26 +805,38 @@ function TabRevenus({ client, dossier }: { client: any; dossier: Dossier }) {
   }
 
   return (
-    <Section title="Revenus mensuels nets retenus">
-      <div className="grid grid-cols-2 gap-6">
-        {buildBlock('Emprunteur principal', e1, client.revenuMensuelNet)}
-        {(e2 || client.conjoint) && buildBlock('Co-emprunteur', e2, 0)}
-      </div>
-
-      {/* Total foyer si on a les 2 emprunteurs */}
-      {e2 && (
-        <div className="mt-4 p-3 rounded-lg bg-gold-50/40 border border-gold-200 flex items-center justify-between">
-          <span className="text-sm font-semibold text-navy-900">Total revenus foyer (mensuel)</span>
-          <span className="font-serif text-lg font-bold text-gold-700">
-            {(() => {
-              const s1 = (emp<number>(e1, 'salaireNet') || client.revenuMensuelNet || 0)
-              const s2 = (emp<number>(e2, 'salaireNet') || 0)
-              return eur(s1 + s2)
-            })()}
-          </span>
+    <>
+      {onEdit && (
+        <div className="flex justify-end mb-3">
+          <button onClick={onEdit} className="btn-outline text-sm">
+            <Pencil className="h-3.5 w-3.5" /> Modifier les revenus
+          </button>
         </div>
       )}
-    </Section>
+      <Section title="Revenus mensuels nets retenus">
+        <div className="grid grid-cols-2 gap-6">
+          {buildBlock('Emprunteur principal', e1, client.revenuMensuelNet)}
+          {(e2 || client.conjoint) && buildBlock('Co-emprunteur', e2, 0)}
+        </div>
+
+        {/* Total foyer si on a les 2 emprunteurs */}
+        {e2 && (
+          <div className="mt-4 p-3 rounded-lg bg-gold-50/40 border border-gold-200 flex items-center justify-between">
+            <span className="text-sm font-semibold text-navy-900">Total revenus foyer (mensuel)</span>
+            <span className="font-serif text-lg font-bold text-gold-700">
+              {(() => {
+                const s1 = (emp<number>(e1, 'salaireNet') || client.revenuMensuelNet || 0)
+                const s2 = (emp<number>(e2, 'salaireNet') || 0)
+                return eur(s1 + s2)
+              })()}
+            </span>
+          </div>
+        )}
+      </Section>
+
+      {/* Pièces P2 — profession & revenus (bulletins, contrats, avis IRPP) */}
+      <PiecesParCategorie dossierId={dossierId} categorie="P2" />
+    </>
   )
 }
 
@@ -1068,7 +1130,7 @@ function DpeBadge({ classe, kind }: { classe?: string; kind: 'dpe' | 'ges' }) {
   )
 }
 
-function TabProjet({ dossier }: { dossier: Dossier }) {
+function TabProjet({ dossier, onEdit, dossierId }: { dossier: Dossier; onEdit?: () => void; dossierId: string }) {
   const bien = dossier.bienDetails ?? {}
 
   // Prix retenu pour l'assiette des frais de notaire = coût logement OU montant bien
@@ -1122,13 +1184,22 @@ function TabProjet({ dossier }: { dossier: Dossier }) {
 
   return (
     <>
+      {/* Toolbar avec bouton Modifier — visible direct depuis l'onglet */}
+      {onEdit && (
+        <div className="flex justify-end mb-3">
+          <button onClick={onEdit} className="btn-gold text-sm">
+            <Pencil className="h-3.5 w-3.5" /> Modifier le projet (prix, apport, travaux, frais…)
+          </button>
+        </div>
+      )}
+
       {/* Bandeau d'alerte si prix manquant — fréquent en R0 */}
       {isPrixManquant && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-5 text-xs text-amber-900 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" />
           <div>
             <strong className="text-amber-950">Prix de vente non renseigné</strong>
-            <div className="mt-0.5">L'extract n'a pas pu déterminer le prix du bien (généralement non communiqué avant R1 ou compromis). Saisis-le manuellement depuis le bouton « Modifier » du dossier pour activer les calculs de plan de financement.</div>
+            <div className="mt-0.5">L'extract n'a pas pu déterminer le prix du bien (généralement non communiqué avant R1 ou compromis). Clique sur <strong>« Modifier le projet »</strong> ci-dessus pour saisir le prix, l'apport, le coût des travaux, etc.</div>
           </div>
         </div>
       )}
@@ -1319,6 +1390,9 @@ function TabProjet({ dossier }: { dossier: Dossier }) {
           </div>
         </div>
       </Section>
+
+      {/* Pièces P4 — projet (compromis, DPE, devis travaux, mandat de vente) */}
+      <PiecesParCategorie dossierId={dossierId} categorie="P4" />
     </>
   )
 }
@@ -1333,6 +1407,35 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingPret, setEditingPret] = useState<import('@/data/mock').Pret | undefined>(undefined)
   const [planOpen, setPlanOpen] = useState(false)
+  const [importSimOpen, setImportSimOpen] = useState(false)
+  const [importSimText, setImportSimText] = useState('')
+  const [importingSim, setImportingSim] = useState(false)
+
+  const handleImportSimulation = async () => {
+    const txt = importSimText.trim()
+    if (txt.length < 50) {
+      toast.error('Texte trop court — colle le contenu intégral du AA summary simulation.txt')
+      return
+    }
+    setImportingSim(true)
+    const t = toast.loading('Analyse du plan de financement Cifacil…')
+    try {
+      const res = await importSimulationApi.run(dossier.id, txt)
+      toast.success(`${res.pretsCrees.length} prêt(s) importé(s)`, {
+        id: t,
+        description: `${res.banquePortante || 'banque inconnue'} · ${res.usage.estimatedCostEur.toFixed(3)} €`,
+      })
+      // Re-pull pour récupérer les nouveaux prêts dans le store
+      const { sync } = await import('@/db/api')
+      await sync.pullAll().catch(() => { /* silencieux */ })
+      setImportSimText('')
+      setImportSimOpen(false)
+    } catch (e) {
+      toast.error('Échec de l\'import', { id: t, description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setImportingSim(false)
+    }
+  }
 
   const prets = useMemo(
     () => allPrets.filter((p) => p.dossierId === dossier.id).sort((a, b) => a.rang - b.rang),
@@ -1411,6 +1514,10 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
         title={`Prêts (${prets.length})`}
         action={
           <div className="flex gap-2">
+            <button className="btn-outline text-xs" onClick={() => setImportSimOpen(true)}
+              title="Coller le contenu d'un AA summary simulation.txt pour importer les prêts Cifacil">
+              <Upload className="h-3.5 w-3.5" /> Importer Cifacil
+            </button>
             <button className="btn-outline text-xs" onClick={() => setPlanOpen(true)} disabled={prets.length === 0}>
               <Sparkles className="h-3.5 w-3.5" /> Construire le plan
             </button>
@@ -1544,6 +1651,53 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
         onAddPret={() => { setPlanOpen(false); openNew() }}
         onEditPret={(p) => { setPlanOpen(false); openEdit(p) }}
       />
+
+      {/* Modal d'import du plan de financement Cifacil */}
+      <Modal
+        open={importSimOpen}
+        onClose={() => !importingSim && setImportSimOpen(false)}
+        title="Importer un plan de financement Cifacil"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-navy-700">
+            Colle ci-dessous le contenu intégral du fichier
+            <code className="mx-1 px-1.5 py-0.5 bg-navy-50 rounded text-xs font-mono">AA summary simulation.txt</code>
+            produit par le skill <code className="text-xs font-mono">/dossier-extract-simulation</code> sur OneDrive.
+            Apolline analyse la section §0.1 (plan de financement détaillé) et crée automatiquement
+            les prêts du dossier.
+          </div>
+          <textarea
+            className="textarea w-full font-mono text-xs"
+            rows={14}
+            placeholder="§0 BANQUE PORTANT LE DOSSIER : CEBFC&#10;§0.1 PLAN DE FINANCEMENT DÉTAILLÉ&#10;| # | Type | Montant | Taux | Durée | Mensualité | Nature |&#10;..."
+            value={importSimText}
+            onChange={(e) => setImportSimText(e.target.value)}
+            disabled={importingSim}
+          />
+          <div className="flex items-center justify-between text-xs text-navy-500">
+            <span>{importSimText.length} caractères</span>
+            {prets.length > 0 && (
+              <span className="text-amber-700 inline-flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                {prets.length} prêt(s) déjà présent(s) — les nouveaux seront ajoutés à la suite
+              </span>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-navy-100">
+            <button className="btn-outline text-sm" onClick={() => setImportSimOpen(false)} disabled={importingSim}>
+              Annuler
+            </button>
+            <button className="btn-gold text-sm" onClick={handleImportSimulation} disabled={importingSim || importSimText.trim().length < 50}>
+              {importingSim ? (
+                <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Analyse en cours…</>
+              ) : (
+                <><Sparkles className="h-3.5 w-3.5" /> Analyser et importer</>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </>
   )
 }

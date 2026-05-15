@@ -19,6 +19,7 @@
  * possible, peu importe le DPI scaling ou la taille de viewport.
  */
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 type Props = {
@@ -57,7 +58,8 @@ export default function FullScreenSheet({
 
   if (!open) return null
 
-  return (
+  // Portal vers document.body : échappe aux transforms persistants des ancêtres
+  return createPortal(
     <div
       className="fixed inset-0 z-50 grid grid-rows-[auto_1fr_auto] bg-ivory animate-fade-in"
       role="dialog"
@@ -104,6 +106,7 @@ export default function FullScreenSheet({
           </div>
         </footer>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }
