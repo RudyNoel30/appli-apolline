@@ -17,23 +17,56 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   FolderSearch, FileText, RefreshCw, Sparkles, CheckCircle2, AlertCircle,
-  ArrowRight, Search, Folder, Filter,
+  ArrowRight, Search, Folder, Filter, Files,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import PageHeader from '@/components/PageHeader'
-import { importExtractApi } from '@/db/api'
+import { importExtractApi, importSimulationApi, pieces as piecesApi } from '@/db/api'
 import { useStore } from '@/stores/useStore'
 import { sync } from '@/db/api'
 import { cn } from '@/lib/utils'
 
 const TARGET_FILENAME = 'AA summary extract.txt'
 
+/** Extensions considérées comme des pièces à importer (PDF, images, Office). */
+const PIECE_EXTENSIONS = new Set([
+  '.pdf', '.jpg', '.jpeg', '.png', '.heic', '.webp', '.gif',
+  '.doc', '.docx', '.xls', '.xlsx', '.txt', '.csv',
+])
+
+/** Mapping extension → MIME pour les File objects construits depuis le fs Tauri */
+const MIME_BY_EXT: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.heic': 'image/heic',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+}
+
+/** Fichiers techniques produits par dossier-extract — on les exclut de l'import en tant que pièces */
+const TECHNICAL_FILES = new Set([
+  'AA summary extract.txt',
+  'AA tracfin_analysis.txt',
+  'AA summary dvf.txt',
+  'AA summary simulation.txt',
+])
+
 type DetectedExtract = {
-  filePath: string        // chemin absolu complet
+  filePath: string        // chemin absolu du AA summary extract.txt
   folderPath: string      // dossier parent (= dossier client OneDrive)
   folderName: string      // nom du dossier client (ex: "ZZ BESANA AMA 46 478")
-  hint: string            // 1ère ligne descriptive du fichier (à partir du DOSSIER ... — SUMMARY EXTRACT)
+  hint: string            // 1ère ligne descriptive du fichier
   cible?: string          // cible immobilière si extractible
+  piecesPaths: string[]   // chemins de toutes les pièces (PDFs, images, etc.) du dossier
+  simulationPath?: string // chemin AA summary simulation.txt si présent (plan financement Cifacil)
   existing?: { id: string; ref: string }  // dossier déjà importé (matche par client nom)
 }
 
@@ -101,6 +134,79 @@ async function readFullExtract(filePath: string): Promise<string> {
   return readTextFile(filePath)
 }
 
+/**
+ * Cherche un fichier AA summary simulation.txt à côté du AA summary extract.txt
+ * (même dossier OneDrive). C'est le plan de financement Cifacil produit par
+ * /dossier-extract-simulation. Retourne le chemin absolu si trouvé, sinon undefined.
+ */
+async function findSimulationFile(folderPath: string): Promise<string | undefined> {
+  const { exists } = await import('@tauri-apps/plugin-fs')
+  const candidate = `${folderPath}\\AA summary simulation.txt`
+  try {
+    if (await exists(candidate)) return candidate
+  } catch {
+    /* ignore */
+  }
+  return undefined
+}
+
+/**
+ * Liste récursivement tous les fichiers candidats à l'import dans un dossier
+ * (PDFs, images, Office). Exclut les fichiers techniques de dossier-extract
+ * (AA summary extract.txt, AA tracfin_analysis.txt, etc.) qui ne sont pas
+ * des pièces à classer mais des sous-produits du skill.
+ */
+async function listPiecesInFolder(folderPath: string, maxDepth = 4): Promise<string[]> {
+  const { readDir } = await import('@tauri-apps/plugin-fs')
+  const found: string[] = []
+  type Entry = { name?: string; isDirectory?: boolean; isFile?: boolean }
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth) return
+    let entries: Entry[]
+    try {
+      entries = await readDir(dir) as Entry[]
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (!e.name) continue
+      const fullPath = `${dir}\\${e.name}`
+      if (e.isFile) {
+        // Skip fichiers techniques + tout ce qui ne matche pas une extension supportée
+        if (TECHNICAL_FILES.has(e.name)) continue
+        const dot = e.name.lastIndexOf('.')
+        if (dot < 0) continue
+        const ext = e.name.slice(dot).toLowerCase()
+        if (PIECE_EXTENSIONS.has(ext)) {
+          found.push(fullPath)
+        }
+      } else if (e.isDirectory) {
+        await walk(fullPath, depth + 1)
+      }
+    }
+  }
+
+  await walk(folderPath, 0)
+  return found
+}
+
+/**
+ * Lit un fichier local (Tauri fs) et construit un File browser-compatible
+ * exploitable par notre endpoint multipart `pieces.upload()`.
+ */
+async function readAsBrowserFile(filePath: string): Promise<File> {
+  const { readFile } = await import('@tauri-apps/plugin-fs')
+  const bytes = await readFile(filePath)
+  const filename = filePath.split(/[\\/]/).pop() ?? 'piece'
+  const dot = filename.lastIndexOf('.')
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : ''
+  const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
+  // Note : on cast en BlobPart car le typage Tauri retourne Uint8Array
+  const blob = new Blob([bytes as BlobPart], { type: mime })
+  return new File([blob], filename, { type: mime })
+}
+
 export default function ImportOneDrive() {
   const navigate = useNavigate()
   const dossiers = useStore((s) => s.dossiers)
@@ -147,17 +253,23 @@ export default function ImportOneDrive() {
       }
       toast.loading(`${paths.length} extrait(s) trouvé(s), analyse…`, { id: t })
 
-      // Pour chaque fichier : extrait preview + match dossier existant
+      // Pour chaque fichier : extrait preview + match dossier existant + liste pièces
       const detected: DetectedExtract[] = []
       for (const filePath of paths) {
         const folderPath = filePath.replace(/\\[^\\]+$/, '')
         const folderName = folderPath.replace(/^.*\\/, '')
         const { hint, cible } = await previewExtract(filePath)
 
+        // Liste les pièces présentes dans le dossier (parent de AA summary extract.txt)
+        // — récursif jusqu'à 4 niveaux, exclut les fichiers techniques.
+        const piecesPaths = await listPiecesInFolder(folderPath)
+
+        // Détecte un plan de financement Cifacil (AA summary simulation.txt) côte à côte
+        const simulationPath = await findSimulationFile(folderPath)
+
         // Match dossier existant : par nom client extrait du folderName
-        // (heuristique simple : on extrait "NOM Prénom" ou les 2 premiers noms)
         const existing = matchExistingDossier(folderName, hint, dossiers)
-        detected.push({ filePath, folderPath, folderName, hint, cible, existing })
+        detected.push({ filePath, folderPath, folderName, hint, cible, piecesPaths, simulationPath, existing })
       }
 
       setExtracts(detected)
@@ -183,6 +295,7 @@ export default function ImportOneDrive() {
 
     for (const ex of toImport) {
       try {
+        // 1. Crée le dossier + prospect en BDD via parsing Claude
         const text = await readFullExtract(ex.filePath)
         const res = await importExtractApi.run(text, ex.folderPath)
         success++
@@ -190,6 +303,64 @@ export default function ImportOneDrive() {
         toast.success(`${ex.folderName} importé`, {
           description: `${res.ref}${res.legacyId ? ` · legacy ${res.legacyId}` : ''} · ${res.fieldsImported} champs · ${res.usage.estimatedCostEur.toFixed(3)} €`,
         })
+
+        // 2bis. Si un AA summary simulation.txt est présent, importe le plan de
+        // financement Cifacil → crée les prêts en BDD.
+        if (ex.simulationPath) {
+          const simToast = toast.loading(`Import du plan de financement Cifacil de ${ex.folderName}…`)
+          try {
+            const { readTextFile } = await import('@tauri-apps/plugin-fs')
+            const simText = await readTextFile(ex.simulationPath)
+            const simRes = await importSimulationApi.run(res.dossierId, simText, ex.folderPath)
+            toast.success(`${simRes.pretsCrees.length} prêt(s) Cifacil importé(s)`, {
+              id: simToast,
+              description: `${simRes.banquePortante || 'banque inconnue'} · ${simRes.usage.estimatedCostEur.toFixed(3)} €`,
+            })
+          } catch (e) {
+            toast.warning(`Échec import plan financement ${ex.folderName}`, {
+              id: simToast,
+              description: e instanceof Error ? e.message : String(e),
+            })
+          }
+        }
+
+        // 3. Upload les pièces du dossier OneDrive vers Apolline (en parallèle au toast principal)
+        if (ex.piecesPaths.length > 0) {
+          const pieceToast = toast.loading(`Upload des ${ex.piecesPaths.length} pièces de ${ex.folderName}…`)
+          try {
+            // Lit chaque fichier local et le transforme en File browser-compatible
+            const files: File[] = []
+            for (const p of ex.piecesPaths) {
+              try {
+                files.push(await readAsBrowserFile(p))
+              } catch (e) {
+                console.warn(`[import] échec lecture ${p}`, e)
+              }
+            }
+            if (files.length > 0) {
+              const uploadRes = await piecesApi.upload(res.dossierId, files, {
+                onProgress: (done, total) => {
+                  toast.loading(`Upload pièces ${done}/${total}…`, { id: pieceToast })
+                },
+              })
+              if (uploadRes.errors.length > 0) {
+                toast.warning(`${uploadRes.inserted}/${files.length} pièces uploadées (${uploadRes.errors.length} échecs)`, {
+                  id: pieceToast,
+                  description: uploadRes.errors.slice(0, 3).map((e) => e.filename).join(', '),
+                })
+              } else {
+                toast.success(`${uploadRes.inserted} pièces uploadées`, { id: pieceToast })
+              }
+            } else {
+              toast.dismiss(pieceToast)
+            }
+          } catch (e) {
+            toast.error(`Échec upload pièces ${ex.folderName}`, {
+              id: pieceToast,
+              description: e instanceof Error ? e.message : String(e),
+            })
+          }
+        }
       } catch (e) {
         toast.error(`Échec ${ex.folderName}`, { description: e instanceof Error ? e.message : String(e) })
       }
@@ -363,6 +534,21 @@ export default function ImportOneDrive() {
                     </div>
                     {e.hint && <div className="text-xs text-navy-600 mt-0.5">{e.hint}</div>}
                     {e.cible && <div className="text-[11px] text-navy-500 mt-0.5">🏠 {e.cible}</div>}
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                      {e.piecesPaths.length > 0 && (
+                        <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1">
+                          <Files className="h-3 w-3" />
+                          {e.piecesPaths.length} pièce{e.piecesPaths.length > 1 ? 's' : ''} à importer
+                        </span>
+                      )}
+                      {e.simulationPath && (
+                        <span className="text-[11px] text-gold-700 inline-flex items-center gap-1 bg-gold-50 border border-gold-200 rounded px-1.5 py-0.5"
+                          title="Plan de financement Cifacil détecté — les prêts seront importés automatiquement">
+                          <Sparkles className="h-3 w-3" />
+                          Plan financement Cifacil
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[10px] text-navy-400 mt-1 font-mono truncate" title={e.filePath}>
                       {e.filePath}
                     </div>

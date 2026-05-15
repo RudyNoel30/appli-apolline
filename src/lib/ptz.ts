@@ -191,9 +191,15 @@ export function validatePtz(input: PtzValidationInput): PtzValidation {
 
   // 5. Travaux ≥ 25 % si ancien
   if (input.nature === 'ancien_avec_travaux') {
-    const ratioTravaux = input.coutOperation > 0 ? input.coutTravaux / input.coutOperation : 0
-    if (ratioTravaux < 0.25) {
-      blocages.push(`Travaux d'amélioration insuffisants (${(ratioTravaux * 100).toFixed(1)} %). Le PTZ ancien exige ≥ 25 % du coût total.`)
+    if (input.coutTravaux === 0 && input.coutOperation > 0) {
+      // Cas spécifique : coût travaux non renseigné → message actionnable
+      blocages.push(`Coût des travaux non renseigné dans le dossier. Le PTZ ancien exige ≥ 25 % de travaux. Renseigne le montant dans Modifier le projet → Coût des travaux.`)
+    } else {
+      const ratioTravaux = input.coutOperation > 0 ? input.coutTravaux / input.coutOperation : 0
+      if (ratioTravaux < 0.25) {
+        const minimumNecessaire = Math.ceil(input.coutOperation * 0.25 / 1000) * 1000
+        blocages.push(`Travaux insuffisants (${(ratioTravaux * 100).toFixed(1)} % du coût total, ${input.coutTravaux.toLocaleString('fr-FR')} €). Le PTZ ancien exige ≥ 25 % du coût total — minimum ${minimumNecessaire.toLocaleString('fr-FR')} € de travaux.`)
+      }
     }
   }
 

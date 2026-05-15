@@ -16,6 +16,8 @@
 import { promises as fs, createReadStream, type ReadStream } from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
+import { sql, eq } from 'drizzle-orm'
+import { db, schema } from '../db/index.js'
 
 const STORAGE_ROOT = process.env.PIECES_STORAGE_DIR ?? '/var/lib/apolline/pieces'
 
@@ -79,6 +81,40 @@ export async function deleteFile(dossierId: string, pieceId: string): Promise<vo
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
     // Si le fichier n'existe pas, on log mais on ne bloque pas (la ligne BDD doit pouvoir être supprimée)
     console.warn(`[pieces-storage] fichier déjà absent : ${filePath}`)
+  }
+}
+
+/**
+ * Recompte le nombre de pièces réellement présentes en BDD pour ce dossier et
+ * met à jour `dossiers.piecesFournies` en conséquence (atomique via COUNT(*)
+ * dans le UPDATE — pas de race condition possible).
+ *
+ * À appeler après chaque INSERT / DELETE / mise à jour pieces. Idempotent.
+ *
+ * Le compteur `piecesTotal` n'est PAS touché — il représente la convention
+ * métier (24 pièces non optionnelles côté front, ou ce que le user a paramétré).
+ * Si dossier.piecesTotal vaut 0 (jamais initialisé), on le règle au défaut 24
+ * pour que le ratio fourni/total soit affichable d'office.
+ */
+export async function recomputePiecesCount(dossierId: string): Promise<{ piecesFournies: number; piecesTotal: number }> {
+  // 1. UPDATE atomique du compteur fournies depuis le COUNT réel
+  const updated = await db
+    .update(schema.dossiers)
+    .set({
+      piecesFournies: sql`(SELECT COUNT(*)::int FROM pieces WHERE dossier_id = ${dossierId})`,
+      // Si piecesTotal n'a jamais été défini (vaut 0), on initialise à 24
+      // (= nombre de pièces non optionnelles dans la convention Apolline)
+      piecesTotal: sql`CASE WHEN dossiers.pieces_total = 0 THEN 24 ELSE dossiers.pieces_total END`,
+    })
+    .where(eq(schema.dossiers.id, dossierId))
+    .returning({
+      piecesFournies: schema.dossiers.piecesFournies,
+      piecesTotal: schema.dossiers.piecesTotal,
+    })
+  const row = updated[0]
+  return {
+    piecesFournies: row?.piecesFournies ?? 0,
+    piecesTotal: row?.piecesTotal ?? 24,
   }
 }
 

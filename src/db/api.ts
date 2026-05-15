@@ -447,6 +447,38 @@ export const importExtractApi = {
   },
 }
 
+export type ImportSimulationPretCree = {
+  id: string
+  rang: number
+  type: string
+  libelle: string | null
+  montant: number
+  tauxNominal: number | null
+  dureeMois: number
+}
+
+export type ImportSimulationResult = {
+  ok: true
+  dossierId: string
+  banquePortante: string
+  pretsCrees: ImportSimulationPretCree[]
+  usage: { inputTokens: number; outputTokens: number; estimatedCostEur: number }
+}
+
+export const importSimulationApi = {
+  /**
+   * Importe les prêts d'un plan de financement Cifacil dans un dossier existant
+   * depuis le contenu d'un fichier AA summary simulation.txt
+   * (généré par /dossier-extract-simulation sur OneDrive).
+   *
+   * Ajoute des lignes dans la table prets — ne modifie pas le dossier.
+   * ~3-5 secondes par import.
+   */
+  async run(dossierId: string, simulationText: string, sourceFolderPath?: string): Promise<ImportSimulationResult> {
+    return request('POST', `/api/dossiers/${dossierId}/import-simulation`, { simulationText, sourceFolderPath })
+  },
+}
+
 /* ────────────────── AI / Anthropic Claude ────────────────── */
 
 export type AiSkillInfo = { name: string; tier: 'sonnet' | 'haiku' | 'opus'; model: string; title: string; description: string }

@@ -25,6 +25,7 @@ import { notifyChange } from '../realtime/notify.js'
 import {
   writeFile, readFileStream, deleteFile,
   isMimeAllowed, categoryFromFilename, PIECE_MAX_SIZE,
+  recomputePiecesCount,
 } from '../lib/pieces-storage.js'
 import {
   classifyDocument, extractDocument, isExtractionAvailable,
@@ -146,6 +147,15 @@ piecesRoute.post('/dossiers/:dossierId/pieces/upload', authMiddleware, async (c)
     }
   }
 
+  // Recompte piecesFournies au dossier (atomique) après tous les inserts.
+  // Met aussi à jour le row du dossier dans le store via notifyChange.
+  if (inserted.length > 0) {
+    await recomputePiecesCount(dossierId).catch((e) => {
+      console.warn('[pieces] recomputePiecesCount upload échec', e)
+    })
+    await notifyChange({ table: 'dossiers' as never, action: 'update', id: dossierId })
+  }
+
   return c.json({
     inserted: inserted.length,
     errors,
@@ -225,6 +235,12 @@ piecesRoute.delete('/pieces/:id', authMiddleware, async (c) => {
   await deleteFile(piece.dossierId, piece.id)
   await db.delete(schema.pieces).where(eq(schema.pieces.id, id))
   await notifyChange({ table: 'pieces' as never, action: 'delete', id })
+
+  // Décrémente le compteur dossier (recompute atomique = pas de désynchro)
+  await recomputePiecesCount(piece.dossierId).catch((e) => {
+    console.warn('[pieces] recomputePiecesCount delete échec', e)
+  })
+  await notifyChange({ table: 'dossiers' as never, action: 'update', id: piece.dossierId })
 
   audit({
     action: 'delete', userId: u.sub, userEmail: u.email,

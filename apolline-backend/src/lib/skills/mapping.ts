@@ -1,20 +1,32 @@
 /**
  * Mapping skill → modèle Anthropic.
  *
- * Sonnet pour les skills complexes (génération HTML/PDF banque-grade).
- * Haiku pour les skills simples (étude client, simulation).
+ * Hiérarchie qualité/coût (par 1M tokens) :
+ *  - Haiku  ≈ 0.80 €/4.00 €  → skills simples, classement, court
+ *  - Sonnet ≈ 2.85 €/14.25 € → skills complexes, génération HTML banque-grade
+ *  - Opus   ≈ 14.25 €/71.25 € → skills CRITIQUES (DDP, dossier banquier PRO)
+ *
+ * Le DDP et le dossier-html-pro sont les LIVRABLES BANQUE — qualité du
+ * raisonnement et de la rédaction directement corrélée au taux d'accord.
+ * On y consacre Opus, le surcoût (~0.25-0.30 €/doc) est négligeable face
+ * à l'enjeu de signature.
  *
  * Override possible via env var ANTHROPIC_MODEL_<SKILL_UPPERCASE_UNDERSCORE>.
- * Ex : `ANTHROPIC_MODEL_DDP_PDF=claude-3-opus-...`
+ * Ex : `ANTHROPIC_MODEL_DDP_PDF=claude-opus-4-7-20251215`
  */
 
 export type SkillTier = 'sonnet' | 'haiku' | 'opus'
 
 const DEFAULT_MAPPING: Record<string, SkillTier> = {
-  // Skills complexes : qualité bancaire critique → Sonnet
-  'ddp-pdf': 'sonnet',
+  // Skills CRITIQUES banque : qualité maximale → Opus
+  // (le DDP est le document décisionnel envoyé au banquier ; le dossier-html-pro
+  //  traite des projets professionnels où l'analyse bilancielle exige une finesse
+  //  particulière sur les SIG, ratios CAF/annuité, secteur d'activité)
+  'ddp-pdf': 'opus',
+  'dossier-html-pro': 'opus',
+
+  // Skills complexes : qualité bancaire correcte → Sonnet
   'dossier-html': 'sonnet',
-  'dossier-html-pro': 'sonnet',
   'dossier-html-dvf': 'sonnet',
 
   // Skills moyens : extraction de données structurées → Sonnet (le contexte est délicat)
@@ -29,10 +41,12 @@ const DEFAULT_MAPPING: Record<string, SkillTier> = {
   'extract-g-support': 'haiku',
 }
 
+// Models par défaut — alignés sur la dernière gamme Claude 4.7 dispo
+// (override par env var pour suivre les sorties Anthropic au fil de l'eau)
 const TIER_TO_MODEL: Record<SkillTier, string> = {
-  sonnet: process.env.ANTHROPIC_MODEL_SONNET ?? 'claude-sonnet-4-5-20250929',
+  sonnet: process.env.ANTHROPIC_MODEL_SONNET ?? 'claude-sonnet-4-7-20251215',
   haiku: process.env.ANTHROPIC_MODEL_HAIKU ?? 'claude-haiku-4-5-20251015',
-  opus: process.env.ANTHROPIC_MODEL_OPUS ?? 'claude-opus-4-5-20251030',
+  opus: process.env.ANTHROPIC_MODEL_OPUS ?? 'claude-opus-4-7-20251215',
 }
 
 /**

@@ -1668,7 +1668,7 @@ function TabFinancement({ dossier }: { dossier: Dossier }) {
             les prêts du dossier.
           </div>
           <textarea
-            className="textarea w-full font-mono text-xs"
+            className="w-full rounded-md border border-navy-200 px-3 py-2 font-mono text-xs text-navy-900 placeholder:text-navy-400 focus:outline-none focus:ring-2 focus:ring-gold-500/40 focus:border-gold-500 disabled:opacity-50 disabled:cursor-not-allowed"
             rows={14}
             placeholder="§0 BANQUE PORTANT LE DOSSIER : CEBFC&#10;§0.1 PLAN DE FINANCEMENT DÉTAILLÉ&#10;| # | Type | Montant | Taux | Durée | Mensualité | Nature |&#10;..."
             value={importSimText}

@@ -24,6 +24,7 @@ import { conformiteRoute } from './routes/conformite.js'
 import { auditDossierRoute } from './routes/audit-dossier.js'
 import { banquesScoringRoute } from './routes/banques-scoring.js'
 import { importExtractRoute } from './routes/import-extract.js'
+import { importSimulationRoute } from './routes/import-simulation.js'
 import { sseRoute } from './realtime/sse.js'
 import { startCron } from './realtime/cron.js'
 import { hashPassword } from './middleware/auth.js'
@@ -129,6 +130,7 @@ app.route('/api/conformite', conformiteRoute)
 app.route('/api', auditDossierRoute)
 app.route('/api/banques', banquesScoringRoute)
 app.route('/api', importExtractRoute)
+app.route('/api', importSimulationRoute)
 
 // ─── CRUD entités métier ───
 app.route('/api/clients', crudRoute({
