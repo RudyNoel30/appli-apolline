@@ -172,9 +172,34 @@ export async function importSimulation(
 
     const banquePortante = str(parsed.banque)
     const prets = Array.isArray(parsed.prets) ? parsed.prets : []
+    const totalAnnonce = Math.round(num(parsed.totalPretsAnnonce))
 
     if (prets.length === 0) {
       return { status: 'failed', error: 'Aucun prêt extrait du plan de financement', usage }
+    }
+
+    // ─── Correction d'arrondi ─────────────────────────────────────────────
+    // Si la DDP annonce un total prêts (ex. 200 000 €) et que la somme des
+    // prêts arrondis individuellement diffère (ex. 199 999 € à cause d'un
+    // 134 999,50 € rondé vers le bas), on ajuste le PLUS GROS prêt du delta.
+    // Tolérance ±5 € pour éviter de masquer une vraie erreur d'extraction.
+    if (totalAnnonce > 0 && prets.length > 0) {
+      const sommeArrondie = prets.reduce((s, p) => {
+        const pp = p as Record<string, unknown>
+        return s + Math.round(num(pp.montant))
+      }, 0)
+      const delta = totalAnnonce - sommeArrondie
+      if (delta !== 0 && Math.abs(delta) <= 5) {
+        // Trouve l'index du prêt avec le plus gros montant et lui ajoute le delta
+        let idxBiggest = 0
+        let biggest = -Infinity
+        for (let i = 0; i < prets.length; i++) {
+          const m = Math.round(num((prets[i] as Record<string, unknown>).montant))
+          if (m > biggest) { biggest = m; idxBiggest = i }
+        }
+        const target = prets[idxBiggest] as Record<string, unknown>
+        target.montant = Math.round(num(target.montant)) + delta
+      }
     }
 
     // Récupérer le rang max existant pour ne pas écraser les prêts déjà saisis

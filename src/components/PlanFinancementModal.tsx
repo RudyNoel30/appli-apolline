@@ -373,12 +373,26 @@ export default function PlanFinancementModal({ open, onClose, dossier, onAddPret
               <KpiRow label="Apport" value={eur(apport)} accent="navy" />
               <KpiRow label="Total prêts" value={eur(totalEmprunte)} accent="navy" />
               <hr className="border-navy-100 my-1" />
-              <KpiRow
-                label="Reste à financer"
-                value={eur(resteAFinancer)}
-                accent={Math.abs(resteAFinancer) <= 1 ? 'emerald' : 'rose'}
-                bold
-              />
+              {/* Tolérance ≤ 1 € : les arrondis Cifacil vs barème notaire peuvent
+                  produire un écart cosmétique. On affiche "Équilibré" en vert et
+                  on conserve la valeur exacte en tooltip pour transparence. */}
+              {Math.abs(resteAFinancer) <= 1 ? (
+                <div title={`Écart réel : ${eur(resteAFinancer)} (arrondis d'import absorbés)`}>
+                  <KpiRow
+                    label="Reste à financer"
+                    value={resteAFinancer === 0 ? eur(0) : 'Équilibré'}
+                    accent="emerald"
+                    bold
+                  />
+                </div>
+              ) : (
+                <KpiRow
+                  label="Reste à financer"
+                  value={eur(resteAFinancer)}
+                  accent={resteAFinancer < 0 ? 'navy' : 'rose'}
+                  bold
+                />
+              )}
             </KpiBlock>
 
             <KpiBlock title="Indicateurs du plan" compact>

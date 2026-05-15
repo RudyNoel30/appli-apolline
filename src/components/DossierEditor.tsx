@@ -948,7 +948,8 @@ function SectionProjet({ s, update, coutTotal, autoFraisNotaire, setAutoFraisNot
   autoFraisNotaire: boolean
   setAutoFraisNotaire: (v: boolean) => void
 }) {
-  const ltv = s.coutLogement > 0 ? (s.montantPret / s.coutLogement) * 100 : 0
+  // LTV "live" affichée dans la modale "Construire le plan" (onglet Financement)
+  // — c'est la valeur authentique calculée depuis les prêts effectifs du dossier.
   return (
     <>
       <Group title="Nature du projet" eyebrow="Caractéristiques">
@@ -1030,37 +1031,13 @@ function SectionProjet({ s, update, coutTotal, autoFraisNotaire, setAutoFraisNot
         </div>
       </Group>
 
-      <Group title="Plan de financement" eyebrow="Apport & emprunt">
+      <Group title="Apport personnel" eyebrow="Financement">
         <div className="grid grid-cols-3 gap-3">
           <Field label="Apport personnel (€)" type="number" value={s.apport} onChange={(v) => update('apport', v)} />
-          <Field label="Montant emprunté (€)" type="number" value={s.montantPret} onChange={(v) => update('montantPret', v)} />
-          <Select label="Durée" value={String(s.dureeMois) as any} onChange={(v) => update('dureeMois', Number(v))}
-            options={['180', '240', '300']} />
           <div className="col-span-2 rounded-lg bg-navy-50 border border-navy-100 p-3 text-xs flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-navy-600 shrink-0" />
             <span className="text-navy-700">
-              Banque cible, taux et mensualités sont définis sur chaque <strong>prêt</strong> (onglet Financement du dossier).
-            </span>
-          </div>
-          <div className="flex items-end pb-1">
-            <div className="w-full bg-navy-50 border border-navy-100 rounded-lg p-3">
-              <div className="text-[10px] uppercase tracking-wider font-semibold text-navy-600">LTV calculée</div>
-              <div className={cn(
-                'font-serif text-xl font-semibold',
-                ltv > 90 ? 'text-amber-700' : 'text-navy-900',
-              )}>{ltv.toFixed(1)}%</div>
-            </div>
-          </div>
-          <div className="col-span-3 rounded-lg bg-ivory border border-navy-100 p-3 text-xs flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-gold-600 shrink-0" />
-            <span className="text-navy-700">
-              Apport + emprunt = <strong>{eur(s.apport + s.montantPret)}</strong>
-              {' · '}
-              Coût total = <strong>{eur(coutTotal)}</strong>
-              {' · '}
-              {s.apport + s.montantPret >= coutTotal
-                ? <span className="text-emerald-700 font-semibold">Financement complet ✓</span>
-                : <span className="text-rose-700 font-semibold">Manque {eur(coutTotal - s.apport - s.montantPret)}</span>}
+              Le montant emprunté, la durée, les taux et mensualités sont définis directement sur chaque <strong>prêt</strong> dans l'onglet <strong>Financement</strong> du dossier. Coût total opération : <strong>{eur(coutTotal)}</strong>.
             </span>
           </div>
         </div>

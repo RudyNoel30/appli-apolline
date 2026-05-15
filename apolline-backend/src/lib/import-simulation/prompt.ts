@@ -35,6 +35,7 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
 
 {
   "banque": "string — nom de la banque portant le dossier (CEBFC / LBP / CACE / BPBFC / SG / autre)",
+  "totalPretsAnnonce": number,  // Total des prêts tel qu'affiché sur la DDP (ligne "Total prêts" ou "Total emprunts"). Sert à corriger les arrondis. 0 si non trouvé.
   "prets": [
     {
       "rang": number,             // ordre d'affichage (1, 2, 3…)
