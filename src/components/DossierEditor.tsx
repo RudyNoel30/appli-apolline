@@ -634,7 +634,33 @@ function SectionIdentite({ s, update, updateE1, updateE2 }: {
             checked={s.hasCoEmprunteur}
             onChange={(e) => {
               update('hasCoEmprunteur', e.target.checked)
-              if (e.target.checked && !s.emprunteur2) update('emprunteur2', emptyEmprunteur())
+              // À la création du co-emprunteur, on hérite des champs du couple
+              // (situation familiale, régime matrimonial, enfants à charge,
+              // nationalité, adresse). Ce sont les champs qu'un couple partage
+              // toujours — gain de temps Sébastien (retour beta 2026-05). Le
+              // courtier peut bien sûr modifier après si besoin.
+              if (e.target.checked && !s.emprunteur2) {
+                const e1 = s.emprunteur1
+                update('emprunteur2', {
+                  ...emptyEmprunteur(),
+                  situationFamiliale: e1.situationFamiliale,
+                  regimeMatrimonial: e1.regimeMatrimonial,
+                  enfantsACharge: e1.enfantsACharge,
+                  nationalite: e1.nationalite,
+                  // Adresse partagée par défaut (cas du couple cohabitant) — le
+                  // bouton "↳ Recopier l'adresse" reste dispo si l'utilisateur
+                  // l'a modifié et veut re-synchroniser.
+                  adresse: e1.adresse,
+                  adresseSuite: e1.adresseSuite,
+                  codePostal: e1.codePostal,
+                  ville: e1.ville,
+                  // Statut occupation aussi typiquement partagé
+                  statutOccupation: e1.statutOccupation,
+                  logementDepuis: e1.logementDepuis,
+                  loyerActuel: e1.loyerActuel,
+                  hlm: e1.hlm,
+                })
+              }
             }}
             className="accent-gold-500"
           />
