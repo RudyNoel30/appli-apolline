@@ -876,8 +876,10 @@ function SectionCharges({ s, update, updateE1, updateE2 }: {
       )}
 
       <Group title="Dépenses communes au ménage" eyebrow="Ménage">
+        {/* Note 2026-05 : "Épargne programmée" déplacée vers la section
+            "Crédits, épargne & patrimoine" — c'est une capacité d'épargne du
+            foyer, pas une charge qui pèse sur le calcul d'endettement. */}
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Épargne programmée (€/mois)" type="number" value={s.epargneMenage} onChange={(v) => update('epargneMenage', v)} />
           <Field label="Loyer persistant (€/mois)" type="number" value={s.loyerMenage} onChange={(v) => update('loyerMenage', v)} />
           <Field label="Autres dépenses (€/mois)" type="number" value={s.autresDepensesMenage} onChange={(v) => update('autresDepensesMenage', v)} />
           <Field label="Emprunts locatifs (€/mois)" type="number" value={s.empruntsLocatifsMenage} onChange={(v) => update('empruntsLocatifsMenage', v)} />
