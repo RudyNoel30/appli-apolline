@@ -32,9 +32,19 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
     "email": "string ou ''",
     "tel": "string ou ''",
     "naissance": "YYYY-MM-DD ou ''",
-    "ville": "string — ville actuelle de résidence (ex: 'DIJON')",
+    "lieuNaissance": "string ou '' — ville de NAISSANCE (ex: 'Besançon'). DIFFÉRENT de la ville d'adresse !",
+    "adresse": "string ou '' — adresse postale complète de résidence (ex: '12 rue des Forges')",
+    "codePostal": "string ou '' — code postal d'adresse (5 chiffres)",
+    "ville": "string — ville d'ADRESSE actuelle (ex: 'DIJON'). ≠ lieuNaissance",
     "profession": "string",
-    "conjoint": "string ou null — 'Prénom NOM' du co-emprunteur si présent",
+    "conjoint": "string ou null — 'Prénom NOM' du co-emprunteur si présent (legacy)",
+    "conjointPrenom": "string ou null — prénom du conjoint (NOUVELLE saisie structurée)",
+    "conjointNom": "string ou null — nom du conjoint",
+    "conjointNaissance": "YYYY-MM-DD ou null — date naissance conjoint",
+    "conjointLieuNaissance": "string ou null — ville de naissance conjoint",
+    "conjointTel": "string ou null",
+    "conjointEmail": "string ou null",
+    "conjointProfession": "string ou null",
     "revenuMensuelNet": number,
     "statutCommercial": "prospect",
     "notes": "string — synthèse 1-2 phrases (ex: 'Couple BESANA/AMA acquisition RP Chevigny, DPE F + travaux à chiffrer')"
@@ -102,6 +112,16 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
       }
     ],
 
+    "droitsEL": [
+      {
+        "id": "string — id court (ex: 'el-1', 'el-2'…)",
+        "type": "Livret A|LDD|LEP|PEL|CEL|Assurance-vie|PEA|PER|Plan d'épargne|Compte courant|Autre",
+        "droits": number,
+        "cedes": boolean,
+        "titulaire": "string — 'Emprunteur', 'Co-emprunteur', 'Commun' ou nom précis"
+      }
+    ],
+
     "bienDetails": {
       "adresseBien": "string ou '' — adresse complète du bien à acquérir (ex: '4 rue d'Amont, 39290 CHEVIGNY')",
       "vendeur": "string ou '' — nom du vendeur (ex: 'Daniel CAMBAZARD')",
@@ -151,7 +171,7 @@ FORMAT DE SORTIE — JSON STRICT, rien d'autre :
     "primoAccedant": boolean,
 
     "profession": "string",
-    "typeContrat": "CDI|CDD|Période d'essai|Fonctionnaire|Indépendant|Gérant majoritaire|Profession libérale|Retraité|Sans emploi|Étudiant",
+    "typeContrat": "CDI|CDD|Période d'essai|Fonctionnaire|Indépendant|Gérant majoritaire|Profession libérale|Auto-entrepreneur|Retraité|Sans emploi|Étudiant",
     "employeur": "string",
     "adresseEmployeur": "string ou '' — adresse complète de l'employeur (ex: '5 rue Alexandre Yersin, 39100 DOLE')",
     "siretEmployeur": "string ou '' — SIRET sur 14 chiffres",
@@ -213,6 +233,7 @@ RÈGLES D'EXTRACTION PRÉCISES :
    - "Gérant SARL" / "Gérant majoritaire" → "Gérant majoritaire"
    - "CDD" → "CDD"
    - "Profession libérale" → "Profession libérale"
+   - "Micro-entreprise" / "Auto-entrepreneur" → "Auto-entrepreneur" (peut cumuler avec CDI principal ⇒ dans ce cas, mettre le typeContrat principal et reporter les revenus AE dans baBicBnc)
    - "Fonctionnaire" → "Fonctionnaire"
    - "Retraité" → "Retraité"
    - "Sans emploi" / "Chômage" → "Sans emploi"
@@ -282,7 +303,29 @@ RÈGLES D'EXTRACTION PRÉCISES :
 
 10. **Apport** : utilise l'épargne mobilisable totale (livrets + PEE débloquable selon §4.2). Ex: "Apport mobilisable total : ~48 856 €" → apport=48856.
 
-11. **Épargne foyer** : somme des livrets + PEE + assurance-vie + CTO mentionnés en §4.2. Ex: ~48 856 € → epargneMenage=48856.
+11. **Épargne foyer** :
+    - **epargneMenage** : somme TOTALE en € des livrets + PEE + assurance-vie + CTO mentionnés en §4.2 (ex: ~48 856 € → 48856). C'est le total agrégé pour calculs rapides.
+    - **droitsEL[]** : DÉCOMPOSITION détaillée — UNE entrée par compte d'épargne identifié dans l'extract. Pour chaque livret/compte mentionné :
+        • type : "Livret A" / "LDD" / "LEP" / "PEL" / "CEL" / "Assurance-vie" / "PEA" / "PER" / "Plan d'épargne" / "Compte courant" / "Autre"
+        • droits : solde du compte en €
+        • titulaire : "Emprunteur" si appartient à l'emprunteur 1, "Co-emprunteur" si à l'emprunteur 2, "Commun" si compte joint
+        • cedes : true si le solde est utilisé comme APPORT (mentionné explicitement comme mobilisé), sinon false par défaut
+    - ⚠ Si §4.2 mentionne juste "Apport mobilisable total : 48 856 €" sans détail par livret → mets quand même un droitsEL[] avec une entrée { type: "Autre", droits: 48856, titulaire: "Commun", cedes: true } pour conserver l'info, et signale-le dans alertes.
+
+11bis. **Conjoint structuré (client.conjoint*)** : si §1.2 EMPRUNTEUR 2 est rempli, remplis aussi les champs structurés du client :
+    - conjointPrenom = emprunteur2.prenom
+    - conjointNom = emprunteur2.nom
+    - conjointNaissance = emprunteur2.naissance
+    - conjointLieuNaissance = emprunteur2.lieuNaissance
+    - conjointTel = emprunteur2.telMobile (ou telDom si pas de mobile)
+    - conjointEmail = emprunteur2.email
+    - conjointProfession = emprunteur2.profession
+    Le champ legacy "conjoint" reste rempli en "Prénom NOM" pour rétrocompat.
+
+11ter. **Distinction lieuNaissance vs ville** :
+    - **lieuNaissance** (client + emprunteurs) = VILLE DE NAISSANCE (ex: "Besançon" si né à Besançon)
+    - **ville** (client + emprunteurs) = VILLE D'ADRESSE actuelle (ex: "Conliège" où il habite aujourd'hui)
+    - ⚠ Ces 2 champs sont DIFFÉRENTS et ne doivent JAMAIS être confondus, même si c'est la même ville par hasard.
 
 12. **Crédits existants** (§2.2) :
    - Si "AUCUN CRÉDIT" / "À reconstituer au R1" → creditsExistants=[] (tableau vide)

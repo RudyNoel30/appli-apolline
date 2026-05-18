@@ -172,15 +172,34 @@ export async function importExtract(
     const ref = await nextDossierRef()
     const legacyId = dossierData.legacyId ? String(dossierData.legacyId).trim() : null
 
+    // Helper : convertit toute valeur "vide/null/undefined" en null (vs string vide)
+    // pour les champs structurés du conjoint et autres optionnels.
+    const str = (v: unknown): string | null => {
+      if (v === null || v === undefined) return null
+      const s = String(v).trim()
+      return s ? s : null
+    }
+
     const [newClient] = await db.insert(schema.clients).values({
       prenom,
       nom,
       email: String(clientData.email ?? ''),
       tel: String(clientData.tel ?? ''),
       naissance: String(clientData.naissance ?? ''),
+      // Nouveaux champs structurés (2026-05 — retour Sébastien)
+      lieuNaissance: str(clientData.lieuNaissance),
+      adresse: str(clientData.adresse),
+      codePostal: str(clientData.codePostal),
       ville: String(clientData.ville ?? ''),
       profession: String(clientData.profession ?? ''),
       conjoint: clientData.conjoint ? String(clientData.conjoint) : null,
+      conjointPrenom: str(clientData.conjointPrenom),
+      conjointNom: str(clientData.conjointNom),
+      conjointNaissance: str(clientData.conjointNaissance),
+      conjointLieuNaissance: str(clientData.conjointLieuNaissance),
+      conjointTel: str(clientData.conjointTel),
+      conjointEmail: str(clientData.conjointEmail),
+      conjointProfession: str(clientData.conjointProfession),
       revenuMensuelNet: Number(clientData.revenuMensuelNet ?? 0),
       statutCommercial: 'prospect',
       notes: clientData.notes ? String(clientData.notes) : null,
@@ -194,6 +213,7 @@ export async function importExtract(
     // 4. Insère dossier — complet, tous les champs du schema retransmis
     const creditsExistants = Array.isArray(dossierData.creditsExistants) ? dossierData.creditsExistants : []
     const patrimoine = Array.isArray(dossierData.patrimoine) ? dossierData.patrimoine : []
+    const droitsEL = Array.isArray(dossierData.droitsEL) ? dossierData.droitsEL : []
 
     const [newDossier] = await db.insert(schema.dossiers).values({
       ref,
@@ -229,9 +249,10 @@ export async function importExtract(
       autresDepensesMenage: Number(dossierData.autresDepensesMenage ?? 0),
       empruntsLocatifsMenage: Number(dossierData.empruntsLocatifsMenage ?? 0),
       empruntsNonLocatifsMenage: Number(dossierData.empruntsNonLocatifsMenage ?? 0),
-      // Patrimoine / crédits existants (jsonb arrays)
+      // Patrimoine / crédits existants / épargne (jsonb arrays)
       creditsExistants: creditsExistants as never,
       patrimoine: patrimoine as never,
+      droitsEL: droitsEL as never,
       // Caractéristiques détaillées du bien (§5 de l'extract)
       bienDetails: (dossierData.bienDetails ?? {}) as never,
       // Caractérisation projet
