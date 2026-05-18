@@ -305,8 +305,11 @@ export default function CoworkerPanel({ open, onClose }: Props) {
 
   return (
     <>
-      {/* Backdrop léger pour fermer au clic en dehors */}
-      <div className="fixed inset-0 z-40 bg-navy-950/30 backdrop-blur-[1px]" onClick={onClose} />
+      {/* Backdrop transparent — sert uniquement à intercepter le clic pour
+          fermer Polette. Pas d'assombrissement ni flou : Sébastien (retour
+          beta 2026-05) doit garder visible le dossier en arrière-plan pendant
+          qu'il discute avec Polette pour pouvoir s'y référer en parallèle. */}
+      <div className="fixed inset-0 z-40" onClick={onClose} />
 
       {/* Panneau latéral droit — thème HUD navy/gold */}
       <aside
