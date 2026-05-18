@@ -18,7 +18,7 @@ import {
 } from '@/data/mock'
 import { cn, eur } from '@/lib/utils'
 import { calcFraisNotaireDetail, type NatureBienNotaire } from '@/lib/finance'
-import { ageFromBirthdate, anciennetelnYears, anciennetelnLabel } from '@/lib/age'
+import { ageFromBirthdate, anciennetelnMois, formatAncienneteMois } from '@/lib/age'
 import CodePostalVilleField, { CodePostalVilleSingleField } from '@/components/CodePostalVilleField'
 
 type EditorState = {
@@ -762,12 +762,14 @@ function SectionRevenus({ s, update, updateE1, updateE2 }: {
 function EmprunteurProfRevenus({ e, updateE, title }: { e: Emprunteur; updateE: UpdEmp; title: string }) {
   const revMensuel = revenuMensuelEmp(e)
   // Auto-calcul de l'ancienneté quand la date d'embauche change.
-  // On NE met PAS à jour si l'utilisateur a saisi une ancienneté manuelle
-  // différente du calcul auto (cas où il a une ancienneté reprise ailleurs).
+  // ⚠ Convention : `e.anciennete` est stocké en MOIS (pas en années) pour
+  // garder la précision sur les CDI <1 an (ex: 4 mois pour un nouveau salarié).
+  // L'import OneDrive, DossierDetail et les calculs HCSF utilisent déjà cette
+  // convention en mois — le formulaire est désormais cohérent.
   useEffect(() => {
-    const annees = anciennetelnYears(e.dateEmbauche)
-    if (annees !== null && annees !== e.anciennete) {
-      updateE('anciennete', annees)
+    const mois = anciennetelnMois(e.dateEmbauche)
+    if (mois !== null && mois !== e.anciennete) {
+      updateE('anciennete', mois)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [e.dateEmbauche])
@@ -778,7 +780,12 @@ function EmprunteurProfRevenus({ e, updateE, title }: { e: Emprunteur; updateE: 
   // (auto-entrepreneur en complément du salariat = cas valide).
   const isLiberalOrIndep = ['Profession libérale', 'Indépendant', 'Gérant majoritaire'].includes(e.typeContrat)
   const showBaBicBnc = isLiberalOrIndep || (e.baBicBnc ?? 0) > 0
-  const ancienneteLabel = anciennetelnLabel(e.dateEmbauche)
+
+  // Décompose les mois en {années, mois résiduels} pour l'édition côté UI
+  const ancMois = e.anciennete ?? 0
+  const ancAnnees = Math.floor(ancMois / 12)
+  const ancMoisRestants = ancMois % 12
+  const ancienneteFormatted = formatAncienneteMois(ancMois)
 
   return (
     <Group title={title} eyebrow="Profession & revenus">
@@ -788,13 +795,46 @@ function EmprunteurProfRevenus({ e, updateE, title }: { e: Emprunteur; updateE: 
         <Field label="Profession" value={e.profession} onChange={(v) => updateE('profession', v)} />
         <Field label="Employeur" value={e.employeur} onChange={(v) => updateE('employeur', v)} />
         <Field label="Date d'embauche" type="date" value={e.dateEmbauche} onChange={(v) => updateE('dateEmbauche', v)} />
-        <Field
-          label="Ancienneté (années)"
-          type="number"
-          value={e.anciennete}
-          onChange={(v) => updateE('anciennete', v)}
-          hint={ancienneteLabel ? `Calcul auto : ${ancienneteLabel}` : undefined}
-        />
+        {/* Ancienneté = double input années + mois, stocké en MOIS TOTAUX.
+            Auto-rempli depuis dateEmbauche, modifiable à la main si besoin
+            (ex: salarié arrivé par mutation, période d'essai écourtée). */}
+        <div>
+          <label className="label">
+            Ancienneté
+            <span className="ml-2 text-[10px] font-normal text-navy-500 italic">{ancienneteFormatted}</span>
+          </label>
+          <div className="grid grid-cols-2 gap-1">
+            <div className="relative">
+              <input
+                type="number"
+                min={0}
+                value={ancAnnees === 0 ? '' : ancAnnees}
+                placeholder="0"
+                onChange={(ev) => {
+                  const a = Number(ev.target.value || 0)
+                  updateE('anciennete', a * 12 + ancMoisRestants)
+                }}
+                className="input pr-8"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-navy-400 pointer-events-none">an</span>
+            </div>
+            <div className="relative">
+              <input
+                type="number"
+                min={0}
+                max={11}
+                value={ancMoisRestants === 0 ? '' : ancMoisRestants}
+                placeholder="0"
+                onChange={(ev) => {
+                  const m = Math.min(11, Math.max(0, Number(ev.target.value || 0)))
+                  updateE('anciennete', ancAnnees * 12 + m)
+                }}
+                className="input pr-10"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-navy-400 pointer-events-none">mois</span>
+            </div>
+          </div>
+        </div>
         <Field label="Secteur" value={e.secteur} onChange={(v) => updateE('secteur', v)} />
         <Toggle
           label="+ Activité complémentaire (auto-entrepreneur, micro-entreprise)"

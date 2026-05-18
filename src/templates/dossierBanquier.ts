@@ -5,6 +5,7 @@
  */
 import type { Dossier, Client, Collaborateur, Emprunteur, Apporteur, Pret } from '@/data/mock'
 import type { Note } from '@/stores/useStore'
+import { formatAncienneteMois } from '@/lib/age'
 
 const eur = (n?: number | null): string => {
   if (n === undefined || n === null || isNaN(n)) return '—'
@@ -296,7 +297,7 @@ function ficheEmprunteur(client: Client, e: Emprunteur | undefined, role: 'princ
       <tr><td>E-mail</td><td>${escape(e?.email || client.email || '') || incomplete}</td></tr>
       <tr><td>Profession</td><td>${escape(e?.profession || client.profession || '')}${e?.typeContrat ? ` (${escape(e.typeContrat)})` : ''}</td></tr>
       <tr><td>Employeur</td><td>${escape(e?.employeur ?? '') || incomplete}</td></tr>
-      <tr><td>Ancienneté</td><td>${e?.anciennete ? `${e.anciennete} ans` : incomplete}</td></tr>
+      <tr><td>Ancienneté</td><td>${e?.anciennete ? formatAncienneteMois(e.anciennete) : incomplete}</td></tr>
       <tr><td>Consentement RGPD</td><td>${e?.rgpdAccord ? '<span class="status ok">✓ Accordé</span>' : '<span class="status manquant">À recueillir</span>'}</td></tr>
     </table>
   </div>`
@@ -415,7 +416,7 @@ function revenusEmpCard(e: Emprunteur, role: string): string {
       ${e.rfPersonnelN1 ? `<tr><td>Revenu fiscal N-1</td><td>${eur(e.rfPersonnelN1)}/an</td></tr>` : ''}
       ${e.rfPersonnelN2 ? `<tr><td>Revenu fiscal N-2</td><td>${eur(e.rfPersonnelN2)}/an</td></tr>` : ''}
     </table>
-    ${e.dateEmbauche ? `<div class="note-positive">Embauché(e) depuis ${dateFr(e.dateEmbauche)} — ${e.anciennete || 0} ans d'ancienneté.</div>` : ''}
+    ${e.dateEmbauche ? `<div class="note-positive">Embauché(e) depuis ${dateFr(e.dateEmbauche)} — ${formatAncienneteMois(e.anciennete)} d'ancienneté.</div>` : ''}
   </div>`
 }
 
