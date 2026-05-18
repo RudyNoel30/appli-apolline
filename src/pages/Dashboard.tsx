@@ -57,6 +57,9 @@ export default function Dashboard() {
   const rdvs = useStore((s) => s.rdvs)
   const clients = useStore((s) => s.clients)
   const commissions = useStore((s) => s.commissions)
+  // prets nécessaire pour recalculer la LTV bancaire live (vs le snapshot stocké
+  // dans dossier.ltv qui peut être stale après ajout/modification de prêts).
+  const prets = useStore((s) => s.prets)
   const { currentUser } = useAuth()
   const greetingName = currentUser?.prenom?.trim() || currentUser?.nom?.trim() || 'collaborateur'
 
@@ -78,10 +81,10 @@ export default function Dashboard() {
   const encaissementsMensuels = computeEncaissementsMensuels(commissions, today)
   const commissionsMois = computeEncaissementsMois(commissions, today)
   const moisCourantLabel = today.toLocaleDateString('fr-FR', { month: 'long' })
-  // Alertes calculées depuis l'état des dossiers / RDV
-  const alertesGlobales = computeAlertes(dossiers, rdvs, today)
+  // Alertes calculées depuis l'état des dossiers / RDV (LTV recalculée live depuis les prêts)
+  const alertesGlobales = computeAlertes(dossiers, rdvs, prets, today)
   // Tâches actionnables du jour (RDV + relances + pièces + HCSF + stagnation)
-  const tachesJour = computeTachesJour(dossiers, rdvs, today)
+  const tachesJour = computeTachesJour(dossiers, rdvs, prets, today)
   const nbProspects = clients.filter((c) => c.statutCommercial === 'prospect').length
   const nbClients = clients.filter((c) => c.statutCommercial === 'client').length
   const prochainsRdv = [...rdvs]

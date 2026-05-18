@@ -4,7 +4,29 @@
  * Le dashboard ne doit JAMAIS afficher de données mockées — toutes les KPIs
  * sont dérivées du store (qui est lui-même un cache temps-réel de Postgres).
  */
-import type { Commission, Dossier, Rdv, AlerteGlobale } from '@/data/mock'
+import type { Commission, Dossier, Rdv, AlerteGlobale, Pret } from '@/data/mock'
+import { computeLtvBancaire } from '@/lib/finance'
+
+/**
+ * Recalcule LIVE le couple (LTV bancaire, HCSF ok) pour un dossier, depuis les
+ * prêts effectifs. Ne se base PAS sur `dossier.ltv` / `dossier.hcsfOk` qui sont
+ * des snapshots à la création — donc stales dès qu'on ajoute/modifie un prêt
+ * via PretEditor ou import Cifacil.
+ *
+ * Logique : LTV bancaire = Σ prêts hors PTZ/Action Logement / coutLogement.
+ * HCSF : LTV ≤ 100% ET durée max ≤ 25 ans (300 mois) ET endettement ≤ 35%.
+ * Si pas de prêts → on retombe sur les snapshots stockés (pour ne pas afficher
+ * "HCSF OK" alors qu'il n'y a aucun prêt encore — on garde l'évaluation initiale).
+ */
+function computeLiveHcsf(d: Dossier, dossierPrets: Pret[]): { ltv: number; hcsfOk: boolean } {
+  if (dossierPrets.length === 0) {
+    return { ltv: d.ltv ?? 0, hcsfOk: d.hcsfOk ?? true }
+  }
+  const ltv = computeLtvBancaire(dossierPrets, d)
+  const dureeMaxMois = dossierPrets.reduce((m, p) => Math.max(m, p.dureeMois ?? 0), 0)
+  const hcsfOk = ltv <= 1.0 && dureeMaxMois <= 300
+  return { ltv, hcsfOk }
+}
 
 /**
  * "Ma journée" — liste actionnable de ce que le courtier doit faire aujourd'hui.
@@ -24,8 +46,13 @@ export type Tache = {
 export function computeTachesJour(
   dossiers: Dossier[],
   rdvs: Rdv[],
-  refDate: Date = new Date(),
+  pretsOrRefDate?: Pret[] | Date,
+  refDateMaybe: Date = new Date(),
 ): Tache[] {
+  // Rétrocompat : ancien signature (dossiers, rdvs, refDate). Si le 3e arg est
+  // une Date, on l'interprète comme refDate et prets=[].
+  const prets: Pret[] = Array.isArray(pretsOrRefDate) ? pretsOrRefDate : []
+  const refDate: Date = pretsOrRefDate instanceof Date ? pretsOrRefDate : refDateMaybe
   const out: Tache[] = []
   const startOfDay = new Date(refDate); startOfDay.setHours(0, 0, 0, 0)
   const endOfDay = new Date(refDate); endOfDay.setHours(23, 59, 59, 999)
@@ -79,12 +106,15 @@ export function computeTachesJour(
         link: `/dossiers/${d.id}`,
       })
     }
-    // 5. HCSF hors norme
-    if (!d.hcsfOk && !['Encaisse', 'Abandonne'].includes(d.statut)) {
+    // 5. HCSF hors norme — RECALCULÉ LIVE depuis les prêts (LTV bancaire hors
+    // PTZ/Action Logement), pas depuis le snapshot d.ltv qui est stale.
+    const dossierPrets = prets.filter((p) => p.dossierId === d.id)
+    const { ltv: liveLtv, hcsfOk: liveHcsfOk } = computeLiveHcsf(d, dossierPrets)
+    if (!liveHcsfOk && !['Encaisse', 'Abandonne'].includes(d.statut)) {
       out.push({
         id: `hcsf:${d.id}`, type: 'hcsf', priorite: 'haute',
         titre: `HCSF hors norme — ${d.clientNom}`,
-        detail: `LTV ${(d.ltv * 100).toFixed(0)}% · ${d.ref}`,
+        detail: `LTV ${(liveLtv * 100).toFixed(0)}% · ${d.ref}`,
         link: `/dossiers/${d.id}`,
       })
     }
@@ -161,19 +191,33 @@ export function computeEncaissementsMois(commissions: Commission[], refDate: Dat
  *  - Pièces incomplètes (< 50%) → priorité haute
  *  - RDV à venir dans les 3 jours → priorité moyenne
  */
-export function computeAlertes(dossiers: Dossier[], rdvs: Rdv[], _refDate: Date = new Date()): AlerteGlobale[] {
+export function computeAlertes(
+  dossiers: Dossier[],
+  rdvs: Rdv[],
+  pretsOrRefDate?: Pret[] | Date,
+  refDateMaybe: Date = new Date(),
+): AlerteGlobale[] {
+  // Rétrocompat : ancienne signature (dossiers, rdvs, refDate)
+  const prets: Pret[] = Array.isArray(pretsOrRefDate) ? pretsOrRefDate : []
+  const refDate: Date = pretsOrRefDate instanceof Date ? pretsOrRefDate : refDateMaybe
   const alerts: AlerteGlobale[] = []
-  const refDate = _refDate
 
   for (const d of dossiers) {
     if (d.archive) continue
 
-    // HCSF hors norme
-    if (!d.hcsfOk) {
+    // HCSF hors norme — recalculé LIVE depuis les prêts (LTV bancaire), cf
+    // computeLiveHcsf : on ne fait plus confiance au snapshot d.ltv qui devient
+    // stale dès qu'on ajoute/modifie un prêt après création.
+    const dossierPrets = prets.filter((p) => p.dossierId === d.id)
+    const { ltv: liveLtv, hcsfOk: liveHcsfOk } = computeLiveHcsf(d, dossierPrets)
+    if (!liveHcsfOk) {
+      const dureeMaxMois = dossierPrets.length > 0
+        ? dossierPrets.reduce((m, p) => Math.max(m, p.dureeMois ?? 0), 0)
+        : (d.dureeMois ?? 0)
       alerts.push({
         type: 'hcsf',
         titre: `HCSF hors norme — ${d.clientNom}`,
-        detail: `LTV ${(d.ltv * 100).toFixed(0)}% · ${d.dureeMois / 12} ans`,
+        detail: `LTV ${(liveLtv * 100).toFixed(0)}% · ${(dureeMaxMois / 12).toFixed(0)} ans`,
         priorite: 'haute',
         dossierId: d.id,
       })
