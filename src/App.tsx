@@ -15,6 +15,7 @@ import Pieces from './pages/Pieces'
 import Agenda from './pages/Agenda'
 import Commissions from './pages/Commissions'
 import Facturation from './pages/Facturation'
+import Apporteurs from './pages/Apporteurs'
 import Messagerie from './pages/Messagerie'
 import Parametres from './pages/Parametres'
 import ImportOneDrive from './pages/ImportOneDrive'
@@ -547,6 +548,7 @@ export default function App() {
                   <Route path="/messagerie" element={<Messagerie />} />
                   <Route path="/commissions" element={<Commissions />} />
                   <Route path="/facturation" element={<Facturation />} />
+                  <Route path="/apporteurs" element={<Apporteurs />} />
                   <Route path="/parametres" element={<Parametres />} />
                   <Route path="/import-onedrive" element={<ImportOneDrive />} />
                   <Route path="/login" element={<Navigate to="/" replace />} />

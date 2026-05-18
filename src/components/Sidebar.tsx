@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, UserPlus, Users, FolderKanban, Calculator,
   MapPin, FolderOpen, CalendarDays, Coins, Mail, Settings,
-  Pin, PinOff, Sparkles, Receipt, CloudDownload,
+  Pin, PinOff, Sparkles, Receipt, CloudDownload, Handshake,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/stores/useStore'
@@ -24,6 +24,7 @@ const nav = [
   { to: '/messagerie', label: 'Messagerie', icon: Mail },
   { to: '/commissions', label: 'Commissions', icon: Coins },
   { to: '/facturation', label: 'Facturation', icon: Receipt },
+  { to: '/apporteurs', label: 'Apporteurs', icon: Handshake },
 ]
 
 const HIDE_DELAY_MS = 250 // délai avant masquage pour éviter les disparitions accidentelles
