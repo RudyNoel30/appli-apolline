@@ -249,6 +249,7 @@ export const dossiers = pgTable('dossiers', {
   commercialId: text('commercial_id').references(() => collaborateurs.id, { onDelete: 'set null' }),
   backOfficeId: text('back_office_id').references(() => collaborateurs.id, { onDelete: 'set null' }),
   apporteurNom: text('apporteur_nom'),
+  apporteurId: uuid('apporteur_id').references(() => apporteurs.id, { onDelete: 'set null' }),
   apporteurReference: text('apporteur_reference'),
   notaireNom: text('notaire_nom'),
   venteADistance: boolean('vente_a_distance'),
@@ -271,6 +272,7 @@ export const dossiers = pgTable('dossiers', {
   clientIdx: index('dossiers_client_id_idx').on(t.clientId),
   statutIdx: index('dossiers_statut_idx').on(t.statut),
   refIdx: index('dossiers_ref_idx').on(t.ref),
+  apporteurIdIdx: index('dossiers_apporteur_id_idx').on(t.apporteurId),
 }))
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -387,6 +387,11 @@ export type Dossier = {
   backOfficeId?: string
   apporteurNom?: string
   apporteurReference?: string
+  /** Lien vers la fiche apporteur dans le référentiel (page /apporteurs) — permet
+   *  de retrouver RCS/adresse pro pour les chèques de rétrocession sans
+   *  re-saisir sur chaque dossier. apporteurNom reste rempli (= snapshot du nom
+   *  au moment du dossier) pour les exports même si l'apporteur est renommé. */
+  apporteurId?: string
   notaireNom?: string
   venteADistance?: boolean
   archive?: boolean

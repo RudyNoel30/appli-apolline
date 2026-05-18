@@ -20,6 +20,7 @@ import { cn, eur } from '@/lib/utils'
 import { calcFraisNotaireDetail, type NatureBienNotaire } from '@/lib/finance'
 import { ageFromBirthdate, anciennetelnMois, formatAncienneteMois } from '@/lib/age'
 import CodePostalVilleField, { CodePostalVilleSingleField } from '@/components/CodePostalVilleField'
+import ApporteurCombobox from '@/components/ApporteurCombobox'
 
 type EditorState = {
   // Emprunteurs
@@ -69,6 +70,7 @@ type EditorState = {
   commercialId: string
   backOfficeId: string
   apporteurNom: string
+  apporteurId: string  // lien référentiel /apporteurs (vide si saisie libre)
   apporteurReference: string
   notaireNom: string
   venteADistance: boolean
@@ -168,6 +170,7 @@ function dossierToState(dossier: Dossier, client: Client): EditorState {
     commercialId: dossier.commercialId ?? '',
     backOfficeId: dossier.backOfficeId ?? '',
     apporteurNom: dossier.apporteurNom ?? '',
+    apporteurId: dossier.apporteurId ?? '',
     apporteurReference: dossier.apporteurReference ?? '',
     notaireNom: dossier.notaireNom ?? '',
     venteADistance: dossier.venteADistance ?? false,
@@ -356,6 +359,7 @@ export default function DossierEditor({
       commercialId: s.commercialId || undefined,
       backOfficeId: s.backOfficeId || undefined,
       apporteurNom: s.apporteurNom || undefined,
+      apporteurId: s.apporteurId || undefined,
       apporteurReference: s.apporteurReference || undefined,
       notaireNom: s.notaireNom || undefined,
       venteADistance: s.venteADistance,
@@ -1355,9 +1359,26 @@ function SectionMeta({ s, update, collaborateurs }: {
 
       <Group title="Apporteur d'affaires & notaire">
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Nom de l'apporteur" value={s.apporteurNom} onChange={(v) => update('apporteurNom', v)} placeholder="ex : Agence ABC, M. Dupont…" span={2} />
-          <Field label="Référence apporteur" value={s.apporteurReference} onChange={(v) => update('apporteurReference', v)} />
-          <Field label="Notaire" value={s.notaireNom} onChange={(v) => update('notaireNom', v)} span={3} placeholder="ex : Me Dubois — Étude de Dijon" />
+          {/* Lien vers le référentiel /apporteurs — sélectionne dans la BDD ou
+              crée un nouvel apporteur à la volée. Garde le nom snapshot dans
+              apporteurNom pour les exports même si l'apporteur est renommé. */}
+          <div className="col-span-2">
+            <label className="label">
+              Apporteur
+              {s.apporteurId && <span className="ml-2 text-[10px] text-emerald-700 font-normal">✓ lié au référentiel</span>}
+            </label>
+            <ApporteurCombobox
+              value={s.apporteurNom}
+              onChange={(nom, id) => {
+                update('apporteurNom', nom)
+                update('apporteurId', id ?? '')
+              }}
+              placeholder="Choisir dans la base ou taper un nouveau…"
+            />
+          </div>
+          <Field label="Référence apporteur" value={s.apporteurReference} onChange={(v) => update('apporteurReference', v)}
+            placeholder="Numéro de mandat / référence interne" />
+          <Field label="Notaire" value={s.notaireNom} onChange={(v) => update('notaireNom', v)} span={3} placeholder="Étude / Me ..." />
         </div>
       </Group>
 
