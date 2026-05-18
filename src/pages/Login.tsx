@@ -37,8 +37,8 @@ export default function Login() {
     }
     setLoading(true)
     setError(null)
-    // Petit délai pour la transition UX
-    await new Promise((r) => setTimeout(r, 250))
+    // Pas de délai artificiel — Sébastien (retour beta 2026-05) trouvait que
+    // le timer fake faisait perdre du temps à chaque connexion.
     try {
       const res = await login(email, motDePasse)
       if (!res.ok) {
@@ -235,7 +235,7 @@ export default function Login() {
 
         <div className="flex items-center justify-center gap-2 mt-6 text-[11px] text-navy-400">
           <Shield className="h-3 w-3 text-gold-500" />
-          Connexion sécurisée · verrouillage auto 15 min
+          Connexion sécurisée
         </div>
       </div>
 
