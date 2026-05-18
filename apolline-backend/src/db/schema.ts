@@ -49,6 +49,17 @@ export const apporteurs = pgTable('apporteurs', {
   retrocession: real('retrocession'),
   notes: text('notes'),
   importeDeCifacil: boolean('importe_de_cifacil').default(false),
+  // ─── Champs business pour faire des chèques (retour Sébastien 2026-05) ───
+  /** N° RCS / SIREN (obligatoire pour pro) */
+  rcs: text('rcs'),
+  /** Adresse postale pro (chèque de rétrocession) */
+  adressePro: text('adresse_pro'),
+  codePostalPro: text('code_postal_pro'),
+  villePro: text('ville_pro'),
+  /** Carte T (agents immo) */
+  carteT: text('carte_t'),
+  /** IBAN si virement préféré au chèque */
+  iban: text('iban'),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (t) => ({
@@ -121,9 +132,25 @@ export const clients = pgTable('clients', {
   email: text('email').notNull(),
   tel: text('tel').notNull().default(''),
   naissance: text('naissance').notNull().default(''),
+  // Ville d'adresse (séparée de lieuNaissance — retour Sébastien 2026-05).
   ville: text('ville').notNull().default(''),
+  /** Lieu de naissance — séparé de ville (adresse) pour éviter la confusion */
+  lieuNaissance: text('lieu_naissance'),
+  /** Adresse postale complète */
+  adresse: text('adresse'),
+  /** Code postal d'adresse */
+  codePostal: text('code_postal'),
   profession: text('profession').notNull().default(''),
+  /** Champ legacy texte libre — utiliser conjointPrenom/conjointNom à la place */
   conjoint: text('conjoint'),
+  // Conjoint structuré (saisie via la coche dans le form prospect)
+  conjointPrenom: text('conjoint_prenom'),
+  conjointNom: text('conjoint_nom'),
+  conjointNaissance: text('conjoint_naissance'),
+  conjointLieuNaissance: text('conjoint_lieu_naissance'),
+  conjointTel: text('conjoint_tel'),
+  conjointEmail: text('conjoint_email'),
+  conjointProfession: text('conjoint_profession'),
   revenuMensuelNet: integer('revenu_mensuel_net').notNull().default(0),
   apporteur: text('apporteur').notNull().default(''),  // saisie libre + autocomplete
   apporteurId: uuid('apporteur_id').references(() => apporteurs.id, { onDelete: 'set null' }),

@@ -15,10 +15,17 @@ createRoot(document.getElementById('root')!).render(
         <ThemeProvider>
           <App />
           <Toaster
-            position="bottom-right"
+            // top-center : visible peu importe le contexte (modal portal,
+            // sheets full-screen…). bottom-right était caché par les footers
+            // des modaux DossierEditor / PretEditor → Sébastien ne voyait pas
+            // les "Prénom et nom obligatoires" et croyait que le bouton "Créer
+            // le dossier" ne faisait rien (en réalité validation rejetée).
+            position="top-center"
             theme="light"
             richColors
             closeButton
+            // z-index au-dessus de tous les portals (modals/sheets sont à z-50)
+            style={{ zIndex: 100 }}
             toastOptions={{
               style: {
                 fontFamily: 'Inter, system-ui, sans-serif',

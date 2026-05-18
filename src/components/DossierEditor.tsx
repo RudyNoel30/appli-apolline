@@ -18,6 +18,8 @@ import {
 } from '@/data/mock'
 import { cn, eur } from '@/lib/utils'
 import { calcFraisNotaireDetail, type NatureBienNotaire } from '@/lib/finance'
+import { communesByCodePostal } from '@/lib/geo'
+import { ageFromBirthdate, anciennetelnYears, anciennetelnLabel } from '@/lib/age'
 
 type EditorState = {
   // Emprunteurs
@@ -77,21 +79,47 @@ type EditorState = {
 }
 
 function dossierToState(dossier: Dossier, client: Client): EditorState {
-  // Si emprunteur1 non défini, on l'initialise depuis le client
+  // Si emprunteur1 non défini, on l'initialise depuis le client.
+  // ⚠️ Distinguer lieuNaissance (ville de naissance) vs ville (adresse) :
+  // Sébastien (2026-05) avait mis "Besançon" dans le champ "Ville" du
+  // prospect en pensant "ville de naissance" → ça écrasait emprunteur.ville
+  // (adresse) au lieu de emprunteur.lieuNaissance. On lit maintenant les 2.
   const e1: Emprunteur = dossier.emprunteur1 ?? {
     ...emptyEmprunteur(),
     prenom: client.prenom,
     nom: client.nom,
     naissance: client.naissance,
+    lieuNaissance: client.lieuNaissance ?? '',
     email: client.email,
     telMobile: client.tel,
+    adresse: client.adresse ?? '',
+    codePostal: client.codePostal ?? '',
     ville: client.ville,
     profession: client.profession,
     salaireNet: client.revenuMensuelNet,
   }
-  const hasCoEmp = !!dossier.emprunteur2 || !!client.conjoint
+  // Co-emprunteur : on privilégie les champs structurés (conjointPrenom/Nom…)
+  // saisis dans le nouveau formulaire prospect. Fallback legacy : split
+  // de l'ancien champ texte `conjoint` (avec convention "Prenom Nom").
+  const hasCoEmp = !!dossier.emprunteur2 || !!client.conjointPrenom || !!client.conjointNom || !!client.conjoint
   let e2: Emprunteur | null = dossier.emprunteur2 ?? null
-  if (!e2 && client.conjoint) {
+  if (!e2 && (client.conjointPrenom || client.conjointNom)) {
+    e2 = {
+      ...emptyEmprunteur(),
+      prenom: client.conjointPrenom ?? '',
+      nom: client.conjointNom ?? '',
+      naissance: client.conjointNaissance ?? '',
+      lieuNaissance: client.conjointLieuNaissance ?? '',
+      email: client.conjointEmail ?? '',
+      telMobile: client.conjointTel ?? '',
+      profession: client.conjointProfession ?? '',
+      // L'adresse du conjoint est par défaut celle de l'emprunteur 1
+      adresse: client.adresse ?? '',
+      codePostal: client.codePostal ?? '',
+      ville: client.ville ?? '',
+    }
+  } else if (!e2 && client.conjoint) {
+    // Legacy : ancien format texte libre "Prenom Nom"
     const [prenom, ...rest] = client.conjoint.split(' ')
     e2 = { ...emptyEmprunteur(), prenom: prenom ?? '', nom: rest.join(' ') }
   }
@@ -156,7 +184,7 @@ const SECTIONS: { key: Section; label: string; icon: any; eyebrow: string }[] = 
   { key: 'identite', label: 'Identité & contacts', icon: User2, eyebrow: 'Section 1/6' },
   { key: 'revenus', label: 'Profession & revenus', icon: Briefcase, eyebrow: 'Section 2/6' },
   { key: 'charges', label: 'Charges & logement', icon: Wallet, eyebrow: 'Section 3/6' },
-  { key: 'patrimoine', label: 'Crédits, patrimoine, ÉL', icon: Banknote, eyebrow: 'Section 4/6' },
+  { key: 'patrimoine', label: 'Crédits, épargne & patrimoine', icon: Banknote, eyebrow: 'Section 4/6' },
   { key: 'projet', label: 'Projet & coûts', icon: Building2, eyebrow: 'Section 5/6' },
   { key: 'meta', label: 'Apporteur & méta', icon: Bookmark, eyebrow: 'Section 6/6' },
 ]
@@ -343,9 +371,22 @@ export default function DossierEditor({
       email: s.emprunteur1.email,
       tel: s.emprunteur1.telMobile || s.emprunteur1.telDom,
       naissance: s.emprunteur1.naissance,
+      lieuNaissance: s.emprunteur1.lieuNaissance || undefined,
+      adresse: s.emprunteur1.adresse || undefined,
+      codePostal: s.emprunteur1.codePostal || undefined,
       ville: s.emprunteur1.ville,
       profession: s.emprunteur1.profession,
       conjoint: s.hasCoEmprunteur && s.emprunteur2 ? `${s.emprunteur2.prenom} ${s.emprunteur2.nom}`.trim() : undefined,
+      // Conjoint structuré : remonte vers le client pour préserver les champs
+      // saisis dans le bloc co-emprunteur. Évite la perte de données quand
+      // on rouvre le prospect après avoir saisi le co-emprunteur dans le dossier.
+      conjointPrenom: s.hasCoEmprunteur && s.emprunteur2 ? (s.emprunteur2.prenom || undefined) : undefined,
+      conjointNom: s.hasCoEmprunteur && s.emprunteur2 ? (s.emprunteur2.nom || undefined) : undefined,
+      conjointNaissance: s.hasCoEmprunteur && s.emprunteur2 ? (s.emprunteur2.naissance || undefined) : undefined,
+      conjointLieuNaissance: s.hasCoEmprunteur && s.emprunteur2 ? (s.emprunteur2.lieuNaissance || undefined) : undefined,
+      conjointTel: s.hasCoEmprunteur && s.emprunteur2 ? (s.emprunteur2.telMobile || s.emprunteur2.telDom || undefined) : undefined,
+      conjointEmail: s.hasCoEmprunteur && s.emprunteur2 ? (s.emprunteur2.email || undefined) : undefined,
+      conjointProfession: s.hasCoEmprunteur && s.emprunteur2 ? (s.emprunteur2.profession || undefined) : undefined,
       revenuMensuelNet: revenuMensuelEmp(s.emprunteur1),
     }
     onSave(dossierPatch, clientPatch)
@@ -491,7 +532,7 @@ function Row({ k, v, color }: { k: string; v: string; color?: string }) {
 
 /* ─────────────────────────── Champs réutilisables ─────────────────────────── */
 
-function Field({ label, value, onChange, type = 'text', placeholder, required, step, span = 1 }: {
+function Field({ label, value, onChange, type = 'text', placeholder, required, step, span = 1, hint }: {
   label: string
   value: any
   onChange: (v: any) => void
@@ -500,7 +541,15 @@ function Field({ label, value, onChange, type = 'text', placeholder, required, s
   required?: boolean
   step?: string
   span?: 1 | 2 | 3 | 4 | 6
+  hint?: string
 }) {
+  // Pour les inputs number : on affiche '' au lieu de '0' pour éviter le
+  // "zéro bloquant" (l'utilisateur devait sélectionner et effacer le 0 avant
+  // de pouvoir taper). Retour signalé par Sébastien (2026-05).
+  const displayValue =
+    type === 'number' && (value === 0 || value === null || value === undefined)
+      ? ''
+      : (value ?? '')
   return (
     <div className={`col-span-${span}`}>
       <label className="label">
@@ -509,11 +558,12 @@ function Field({ label, value, onChange, type = 'text', placeholder, required, s
       <input
         type={type}
         step={step}
-        value={value ?? ''}
-        placeholder={placeholder}
+        value={displayValue}
+        placeholder={placeholder ?? (type === 'number' ? '0' : undefined)}
         onChange={(e) => onChange(type === 'number' ? Number(e.target.value || 0) : e.target.value)}
         className="input"
       />
+      {hint && <div className="text-[10px] text-navy-500 mt-1 italic">{hint}</div>}
     </div>
   )
 }
@@ -594,23 +644,61 @@ function SectionIdentite({ s, update, updateE1, updateE2 }: {
       </div>
 
       {s.hasCoEmprunteur && s.emprunteur2 && (
-        <EmprunteurIdentite e={s.emprunteur2} updateE={updateE2} title="" hideHeader />
+        <EmprunteurIdentite
+          e={s.emprunteur2}
+          updateE={updateE2}
+          title=""
+          hideHeader
+          // Permet le bouton "Recopier l'adresse de l'emprunteur principal"
+          principal={s.emprunteur1}
+        />
       )}
     </>
   )
 }
 
-function EmprunteurIdentite({ e, updateE, title, hideHeader }: {
+function EmprunteurIdentite({ e, updateE, title, hideHeader, principal }: {
   e: Emprunteur; updateE: UpdEmp; title: string; hideHeader?: boolean
+  /** Emprunteur principal — fourni uniquement pour le co-emprunteur, active le bouton "Recopier l'adresse". */
+  principal?: Emprunteur
 }) {
+  const age = ageFromBirthdate(e.naissance)
+  // Suggestions de communes pour le code postal saisi
+  const [cpSuggestions, setCpSuggestions] = useState<string[]>([])
+  useEffect(() => {
+    const cp = e.codePostal ?? ''
+    if (!/^\d{5}$/.test(cp)) { setCpSuggestions([]); return }
+    let cancelled = false
+    void communesByCodePostal(cp).then((rows) => {
+      if (cancelled) return
+      const names = rows.map((r) => r.nom)
+      setCpSuggestions(names)
+      // Auto-remplit ville si une seule commune correspond et que ville vide
+      if (names.length === 1 && !e.ville) updateE('ville', names[0] ?? '')
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [e.codePostal])
+
+  const copyAdresseFromPrincipal = () => {
+    if (!principal) return
+    updateE('adresse', principal.adresse ?? '')
+    updateE('codePostal', principal.codePostal ?? '')
+    updateE('ville', principal.ville ?? '')
+    updateE('adresseSuite', principal.adresseSuite ?? '')
+  }
+
   return (
     <Group title={hideHeader ? '' : title} eyebrow={hideHeader ? '' : 'État civil'}>
       <div className="grid grid-cols-6 gap-3">
         <Select label="Civilité" value={e.civilite} onChange={(v) => updateE('civilite', v as Civilite)} options={['M.', 'Mme', 'Mlle']} />
         <Field label="Prénom" value={e.prenom} onChange={(v) => updateE('prenom', v)} required span={2} />
         <Field label="Nom" value={e.nom} onChange={(v) => updateE('nom', v)} required span={2} />
-        <Field label="Né(e) le" type="date" value={e.naissance} onChange={(v) => updateE('naissance', v)} />
-        <Field label="Lieu de naissance" value={e.lieuNaissance} onChange={(v) => updateE('lieuNaissance', v)} span={3} />
+        <Field
+          label={age !== null ? `Né(e) le (${age} ans)` : 'Né(e) le'}
+          type="date" value={e.naissance} onChange={(v) => updateE('naissance', v)}
+        />
+        <Field label="Lieu de naissance" value={e.lieuNaissance} onChange={(v) => updateE('lieuNaissance', v)} span={3} placeholder="Ville de naissance" />
         <Field label="Nationalité" value={e.nationalite} onChange={(v) => updateE('nationalite', v)} span={3} />
         <Select label="Situation familiale" value={e.situationFamiliale} onChange={(v) => updateE('situationFamiliale', v as SituationFamiliale)}
           options={['Célibataire', 'Marié(e)', 'Pacsé(e)', 'Divorcé(e)', 'Veuf(ve)', 'Concubinage']} span={2} />
@@ -618,10 +706,35 @@ function EmprunteurIdentite({ e, updateE, title, hideHeader }: {
           options={['Communauté légale', 'Séparation de biens', 'Communauté universelle', 'Participation aux acquêts', 'N/A']} span={3} />
         <Field label="Enfants à charge" type="number" value={e.enfantsACharge} onChange={(v) => updateE('enfantsACharge', v)} />
       </div>
-      <div className="grid grid-cols-6 gap-3 mt-4">
+      {/* Bouton "recopier l'adresse" — visible uniquement pour le co-emprunteur */}
+      {principal && (
+        <div className="flex justify-end mt-3 mb-1">
+          <button type="button"
+            onClick={copyAdresseFromPrincipal}
+            className="text-[11px] font-medium text-gold-700 hover:text-gold-800 inline-flex items-center gap-1 px-2 py-1 rounded border border-gold-200 bg-gold-50 hover:bg-gold-100 transition">
+            ↳ Recopier l'adresse de l'emprunteur principal
+          </button>
+        </div>
+      )}
+      <div className="grid grid-cols-6 gap-3 mt-2">
         <Field label="Adresse" value={e.adresse} onChange={(v) => updateE('adresse', v)} span={4} placeholder="12 rue des Forges" />
-        <Field label="Code postal" value={e.codePostal} onChange={(v) => updateE('codePostal', v)} />
-        <Field label="Ville" value={e.ville} onChange={(v) => updateE('ville', v)} />
+        <Field
+          label="Code postal"
+          value={e.codePostal}
+          onChange={(v) => updateE('codePostal', String(v).replace(/\D/g, '').slice(0, 5))}
+          placeholder="39570"
+        />
+        {cpSuggestions.length > 1 ? (
+          <div className="col-span-1">
+            <label className="label">Ville</label>
+            <select className="input" value={e.ville} onChange={(ev) => updateE('ville', ev.target.value)}>
+              <option value="">— Choisir —</option>
+              {cpSuggestions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        ) : (
+          <Field label="Ville" value={e.ville} onChange={(v) => updateE('ville', v)} />
+        )}
         <Field label="Adresse (suite)" value={e.adresseSuite} onChange={(v) => updateE('adresseSuite', v)} span={6} />
       </div>
       <div className="grid grid-cols-3 gap-3 mt-4">
@@ -662,10 +775,9 @@ function SectionRevenus({ s, update, updateE1, updateE2 }: {
       </Group>
 
       <Group title="Revenus fiscaux du ménage" eyebrow="Avis d'imposition">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <Field label="Revenu fiscal de référence N-1 (€)" type="number" value={s.rfReferenceN1} onChange={(v) => update('rfReferenceN1', v)} />
           <Field label="Revenu fiscal de référence N-2 (€)" type="number" value={s.rfReferenceN2} onChange={(v) => update('rfReferenceN2', v)} />
-          <Field label="Pondération RF" type="number" step="0.01" value={s.ponderationRF} onChange={(v) => update('ponderationRF', v)} />
         </div>
       </Group>
     </>
@@ -674,28 +786,96 @@ function SectionRevenus({ s, update, updateE1, updateE2 }: {
 
 function EmprunteurProfRevenus({ e, updateE, title }: { e: Emprunteur; updateE: UpdEmp; title: string }) {
   const revMensuel = revenuMensuelEmp(e)
+  // Auto-calcul de l'ancienneté quand la date d'embauche change.
+  // On NE met PAS à jour si l'utilisateur a saisi une ancienneté manuelle
+  // différente du calcul auto (cas où il a une ancienneté reprise ailleurs).
+  useEffect(() => {
+    const annees = anciennetelnYears(e.dateEmbauche)
+    if (annees !== null && annees !== e.anciennete) {
+      updateE('anciennete', annees)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [e.dateEmbauche])
+
+  // BA/BIC/BNC : champs pertinents UNIQUEMENT pour les statuts non salariés
+  // (profession libérale, indépendant, gérant, auto-entrepreneur). Pour CDI/CDD
+  // pur ils sont quasiment toujours à 0 — masquons-les sauf si déjà renseignés
+  // (auto-entrepreneur en complément du salariat = cas valide).
+  const isLiberalOrIndep = ['Profession libérale', 'Indépendant', 'Gérant majoritaire'].includes(e.typeContrat)
+  const showBaBicBnc = isLiberalOrIndep || (e.baBicBnc ?? 0) > 0
+  const ancienneteLabel = anciennetelnLabel(e.dateEmbauche)
+
   return (
     <Group title={title} eyebrow="Profession & revenus">
       <div className="grid grid-cols-3 gap-3 mb-4">
         <Select label="Type de contrat" value={e.typeContrat} onChange={(v) => updateE('typeContrat', v as TypeContrat)}
-          options={['CDI', 'CDD', 'Période d\'essai', 'Fonctionnaire', 'Indépendant', 'Gérant majoritaire', 'Profession libérale', 'Retraité', 'Sans emploi', 'Étudiant']} />
+          options={['CDI', 'CDD', 'Période d\'essai', 'Fonctionnaire', 'Indépendant', 'Gérant majoritaire', 'Profession libérale', 'Auto-entrepreneur', 'Retraité', 'Sans emploi', 'Étudiant']} />
         <Field label="Profession" value={e.profession} onChange={(v) => updateE('profession', v)} />
         <Field label="Employeur" value={e.employeur} onChange={(v) => updateE('employeur', v)} />
         <Field label="Date d'embauche" type="date" value={e.dateEmbauche} onChange={(v) => updateE('dateEmbauche', v)} />
-        <Field label="Ancienneté (années)" type="number" value={e.anciennete} onChange={(v) => updateE('anciennete', v)} />
+        <Field
+          label="Ancienneté (années)"
+          type="number"
+          value={e.anciennete}
+          onChange={(v) => updateE('anciennete', v)}
+          hint={ancienneteLabel ? `Calcul auto : ${ancienneteLabel}` : undefined}
+        />
         <Field label="Secteur" value={e.secteur} onChange={(v) => updateE('secteur', v)} />
+        <Toggle
+          label="+ Activité complémentaire (auto-entrepreneur, micro-entreprise)"
+          value={(e.baBicBnc ?? 0) > 0 && !isLiberalOrIndep}
+          onChange={(v) => {
+            if (!v) {
+              updateE('baBicBnc', 0)
+              updateE('baBicBncMois', 12)
+            }
+          }}
+          span={3}
+        />
       </div>
-      <div className="grid grid-cols-3 gap-3 mb-3">
+
+      {/* Revenus principaux */}
+      <div className="grid grid-cols-3 gap-3 mb-2">
         <Field label="Salaire net mensuel (€)" type="number" value={e.salaireNet} onChange={(v) => updateE('salaireNet', v)} />
-        <Field label="BA / BIC / BNC (€/mois)" type="number" value={e.baBicBnc} onChange={(v) => updateE('baBicBnc', v)} />
-        <Field label="Sur combien de mois" type="number" value={e.baBicBncMois} onChange={(v) => updateE('baBicBncMois', v)} />
-        <Field label="Revenus fonciers bruts (€/mois)" type="number" value={e.rfBrutsExistants} onChange={(v) => updateE('rfBrutsExistants', v)} />
+        {showBaBicBnc && (
+          <>
+            <Field label="BA / BIC / BNC (€/mois)" type="number" value={e.baBicBnc} onChange={(v) => updateE('baBicBnc', v)}
+              hint={isLiberalOrIndep ? undefined : 'Activité complémentaire (auto-entr., etc.)'} />
+            <Field label="Sur combien de mois" type="number" value={e.baBicBncMois} onChange={(v) => updateE('baBicBncMois', v)} />
+          </>
+        )}
+        <Field label="Revenus fonciers nets (€/mois)" type="number" value={e.rfBrutsExistants} onChange={(v) => updateE('rfBrutsExistants', v)}
+          hint="Loyers nets perçus (après charges/abattement)" />
         <Field label="Autres revenus non sociaux (€/mois)" type="number" value={e.autresRevenusNonSociaux} onChange={(v) => updateE('autresRevenusNonSociaux', v)} />
         <Field label="Revenus sociaux (€/mois)" type="number" value={e.revenusSociaux} onChange={(v) => updateE('revenusSociaux', v)} />
+      </div>
+
+      {/* Séparateur visuel — les pensions sont conceptuellement distinctes
+          des revenus principaux (impactent fiscalité différemment). */}
+      <div className="my-4 flex items-center gap-2">
+        <div className="flex-1 h-px bg-navy-100" />
+        <span className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold">Compléments</span>
+        <div className="flex-1 h-px bg-navy-100" />
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
         <Field label="Pension alimentaire reçue (€/mois)" type="number" value={e.pensionAlimentaireRecue} onChange={(v) => updateE('pensionAlimentaireRecue', v)} />
         <div className="col-span-2 flex items-end">
           <div className="w-full bg-gold-50 border border-gold-200 rounded-lg p-3">
-            <div className="text-[10px] uppercase tracking-wider font-semibold text-gold-800">Revenu mensuel total personnel</div>
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-gold-800 flex items-center gap-2">
+              <span>Revenu mensuel total personnel</span>
+              {/* Tooltip avec décomposition — debug d'écarts type "+3€ fantômes"
+                  (cas Sébastien 2026-05 : aide à voir lequel des composants
+                  n'est pas à 0 alors qu'on s'y attend). */}
+              <span className="text-[9px] text-navy-500 font-normal italic"
+                title={`Salaire net : ${eur(e.salaireNet)}\n`
+                  + `BA/BIC/BNC mens. : ${eur((e.baBicBnc * (e.baBicBncMois || 12)) / 12)}\n`
+                  + `Revenus fonciers : ${eur(e.rfBrutsExistants)}\n`
+                  + `Autres non sociaux : ${eur(e.autresRevenusNonSociaux)}\n`
+                  + `Revenus sociaux : ${eur(e.revenusSociaux)}\n`
+                  + `Pension reçue : ${eur(e.pensionAlimentaireRecue)}`}>
+                (survoler pour détail)
+              </span>
+            </div>
             <div className="font-serif text-xl font-semibold text-navy-900">{eur(revMensuel)}</div>
           </div>
         </div>
@@ -735,11 +915,14 @@ function SectionCharges({ s, update, updateE1, updateE2 }: {
 }
 
 function EmprunteurCharges({ e, updateE, title }: { e: Emprunteur; updateE: UpdEmp; title: string }) {
+  // Note: "Épargne programmée" déplacée vers la section "Crédits, épargne &
+  // patrimoine" suite au retour Sébastien 2026-05 (c'est une capacité d'épargne,
+  // pas une charge — ne doit pas entrer dans le calcul d'endettement).
   return (
     <Group title={title} eyebrow="Charges & logement">
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <Field label="Épargne programmée (€/mois)" type="number" value={e.epargneProgrammee} onChange={(v) => updateE('epargneProgrammee', v)} />
-        <Field label="Loyer persistant (€/mois)" type="number" value={e.loyerPersistant} onChange={(v) => updateE('loyerPersistant', v)} />
+        <Field label="Loyer persistant (€/mois)" type="number" value={e.loyerPersistant} onChange={(v) => updateE('loyerPersistant', v)}
+          hint="Loyer que l'emprunteur continuera à payer après l'achat (ex: il garde sa loc parisienne)" />
         <Field label="Pension alimentaire versée (€/mois)" type="number" value={e.pensionAlimentaireVersee} onChange={(v) => updateE('pensionAlimentaireVersee', v)} />
         <Field label="Emprunts locatifs (€/mois)" type="number" value={e.empruntsLocatifs} onChange={(v) => updateE('empruntsLocatifs', v)} />
         <Field label="Emprunts non locatifs (€/mois)" type="number" value={e.empruntsNonLocatifs} onChange={(v) => updateE('empruntsNonLocatifs', v)} />
@@ -888,36 +1071,42 @@ function SectionPatrimoine({ s, update }: { s: EditorState; update: UpdState }) 
         </button>
       </Group>
 
-      <Group title="Droits Épargne Logement" eyebrow={`${s.droitsEL.length} compte(s)`}>
+      <Group title="Épargne du foyer" eyebrow={`${s.droitsEL.length} compte(s) — Livret A, LDD, PEL, CEL, AV…`}>
         <div className="rounded-lg border border-navy-100 overflow-hidden mb-2">
           <table className="w-full text-sm">
             <thead>
               <tr>
                 <th className="table-th">Type</th>
-                <th className="table-th text-right">Droits acquis</th>
-                <th className="table-th text-center">Cédés ?</th>
+                <th className="table-th text-right">Solde / Droits (€)</th>
+                <th className="table-th text-center">Cédé(s) au projet ?</th>
                 <th className="table-th">Titulaire</th>
                 <th className="table-th w-10"></th>
               </tr>
             </thead>
             <tbody>
               {s.droitsEL.length === 0 && (
-                <tr><td colSpan={5} className="table-td text-center text-navy-400 italic py-4">Aucun droit</td></tr>
+                <tr><td colSpan={5} className="table-td text-center text-navy-400 italic py-4">
+                  Aucun compte — clique sur "Ajouter" pour saisir un Livret A, LDD, PEL, CEL, assurance-vie, etc.
+                </td></tr>
               )}
               {s.droitsEL.map((d, i) => (
                 <tr key={d.id}>
                   <td className="table-td"><select className="input py-1 text-sm" value={d.type} onChange={(e) => {
                     const arr = [...s.droitsEL]; arr[i] = { ...d, type: e.target.value as DroitEpargneLogement['type'] }; update('droitsEL', arr)
                   }}>
-                    {['PEL', 'CEL', 'Plan d\'épargne'].map((t) => <option key={t}>{t}</option>)}
+                    {['Livret A', 'LDD', 'LEP', 'PEL', 'CEL', 'Assurance-vie', 'PEA', 'PER', 'Plan d\'épargne', 'Compte courant', 'Autre'].map((t) => <option key={t}>{t}</option>)}
                   </select></td>
-                  <td className="table-td"><input type="number" className="input py-1 text-sm text-right" value={d.droits} onChange={(e) => {
-                    const arr = [...s.droitsEL]; arr[i] = { ...d, droits: Number(e.target.value) }; update('droitsEL', arr)
+                  <td className="table-td"><input type="number" className="input py-1 text-sm text-right"
+                    value={d.droits === 0 ? '' : d.droits} placeholder="0"
+                    onChange={(e) => {
+                    const arr = [...s.droitsEL]; arr[i] = { ...d, droits: Number(e.target.value || 0) }; update('droitsEL', arr)
                   }} /></td>
                   <td className="table-td text-center"><input type="checkbox" checked={d.cedes} onChange={(e) => {
                     const arr = [...s.droitsEL]; arr[i] = { ...d, cedes: e.target.checked }; update('droitsEL', arr)
                   }} className="accent-gold-500" /></td>
-                  <td className="table-td"><input className="input py-1 text-sm" value={d.titulaire} onChange={(e) => {
+                  <td className="table-td"><input className="input py-1 text-sm" value={d.titulaire}
+                    placeholder="ex: Emprunteur, Co-emprunteur, commun"
+                    onChange={(e) => {
                     const arr = [...s.droitsEL]; arr[i] = { ...d, titulaire: e.target.value }; update('droitsEL', arr)
                   }} /></td>
                   <td className="table-td">
@@ -931,11 +1120,49 @@ function SectionPatrimoine({ s, update }: { s: EditorState; update: UpdState }) 
             </tbody>
           </table>
         </div>
-        <button className="btn-outline text-xs" onClick={() => update('droitsEL', [...s.droitsEL, {
-          id: genId('EL'), type: 'PEL', droits: 0, cedes: false, titulaire: '',
-        }])}>
-          <Plus className="h-3.5 w-3.5" /> Ajouter un compte
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button className="btn-outline text-xs" onClick={() => update('droitsEL', [...s.droitsEL, {
+            id: genId('EL'), type: 'Livret A', droits: 0, cedes: false, titulaire: '',
+          }])}>
+            <Plus className="h-3.5 w-3.5" /> Livret A
+          </button>
+          <button className="btn-outline text-xs" onClick={() => update('droitsEL', [...s.droitsEL, {
+            id: genId('EL'), type: 'LDD', droits: 0, cedes: false, titulaire: '',
+          }])}>
+            <Plus className="h-3.5 w-3.5" /> LDD
+          </button>
+          <button className="btn-outline text-xs" onClick={() => update('droitsEL', [...s.droitsEL, {
+            id: genId('EL'), type: 'PEL', droits: 0, cedes: false, titulaire: '',
+          }])}>
+            <Plus className="h-3.5 w-3.5" /> PEL
+          </button>
+          <button className="btn-outline text-xs" onClick={() => update('droitsEL', [...s.droitsEL, {
+            id: genId('EL'), type: 'CEL', droits: 0, cedes: false, titulaire: '',
+          }])}>
+            <Plus className="h-3.5 w-3.5" /> CEL
+          </button>
+          <button className="btn-outline text-xs" onClick={() => update('droitsEL', [...s.droitsEL, {
+            id: genId('EL'), type: 'Assurance-vie', droits: 0, cedes: false, titulaire: '',
+          }])}>
+            <Plus className="h-3.5 w-3.5" /> Assurance-vie
+          </button>
+          <button className="btn-outline text-xs" onClick={() => update('droitsEL', [...s.droitsEL, {
+            id: genId('EL'), type: 'Autre', droits: 0, cedes: false, titulaire: '',
+          }])}>
+            <Plus className="h-3.5 w-3.5" /> Autre
+          </button>
+        </div>
+        <div className="mt-3 rounded-lg bg-navy-50 border border-navy-100 p-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-navy-700">
+              <strong>Épargne programmée</strong> du foyer (€/mois — versement régulier)
+            </span>
+            <input type="number"
+              value={s.epargneMenage === 0 ? '' : s.epargneMenage} placeholder="0"
+              onChange={(e) => update('epargneMenage', Number(e.target.value || 0))}
+              className="input max-w-[140px] text-right" />
+          </div>
+        </div>
       </Group>
     </>
   )

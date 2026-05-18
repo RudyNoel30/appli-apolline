@@ -1,4 +1,4 @@
-import { useState, useMemo, type FormEvent } from 'react'
+import { useState, useMemo, useEffect, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Filter, Download, Plus, Mail, Phone, MapPin, Pencil, Trash2, UserCheck, UserMinus, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,6 +9,8 @@ import type { Client } from '@/data/mock'
 import { dateFr, eur, initials, cn } from '@/lib/utils'
 import ApporteurCombobox from '@/components/ApporteurCombobox'
 import { exportToXlsx } from '@/lib/excelExport'
+import { communesByCodePostal } from '@/lib/geo'
+import { ageFromBirthdate } from '@/lib/age'
 
 
 type Mode = 'prospect' | 'client'
@@ -378,20 +380,54 @@ function ClientFormModal({
   onClose: () => void
   onSave: (data: Omit<Client, 'id' | 'createdAt' | 'lastActivity' | 'dossierIds' | 'statutCommercial'>) => void
 }) {
+  // Fiche prospect/client. Suite au retour Sébastien 05/2026, on a séparé :
+  //  - Ville d'adresse (≠ lieu de naissance, qui causait la confusion)
+  //  - Conjoint structuré (prenom/nom/naissance séparés) au lieu d'un champ
+  //    texte ambigu qui rangeait "AUJARD" dans prenom du co-emprunteur.
   const [f, setF] = useState({
     prenom: initial?.prenom ?? '',
     nom: initial?.nom ?? '',
     email: initial?.email ?? '',
     tel: initial?.tel ?? '',
     naissance: initial?.naissance ?? '',
+    lieuNaissance: initial?.lieuNaissance ?? '',
+    adresse: initial?.adresse ?? '',
+    codePostal: initial?.codePostal ?? '',
     ville: initial?.ville ?? '',
     profession: initial?.profession ?? '',
-    conjoint: initial?.conjoint ?? '',
     revenuMensuelNet: initial?.revenuMensuelNet ?? 0,
     apporteur: initial?.apporteur ?? '',
     apporteurId: initial?.apporteurId,
     notes: initial?.notes ?? '',
+    // Bloc conjoint structuré (révélé par la coche)
+    hasConjoint: !!(initial?.conjointPrenom || initial?.conjointNom || initial?.conjoint),
+    conjointPrenom: initial?.conjointPrenom
+      ?? (initial?.conjoint?.split(' ')[0] ?? ''),
+    conjointNom: initial?.conjointNom
+      ?? (initial?.conjoint?.split(' ').slice(1).join(' ') ?? ''),
+    conjointNaissance: initial?.conjointNaissance ?? '',
+    conjointLieuNaissance: initial?.conjointLieuNaissance ?? '',
+    conjointTel: initial?.conjointTel ?? '',
+    conjointEmail: initial?.conjointEmail ?? '',
+    conjointProfession: initial?.conjointProfession ?? '',
   })
+
+  // Suggestions code postal → ville (geo.api.gouv.fr)
+  const [cpSuggestions, setCpSuggestions] = useState<string[]>([])
+  useEffect(() => {
+    if (!/^\d{5}$/.test(f.codePostal)) { setCpSuggestions([]); return }
+    let cancelled = false
+    void communesByCodePostal(f.codePostal).then((rows) => {
+      if (cancelled) return
+      const names = rows.map((r) => r.nom)
+      setCpSuggestions(names)
+      // Auto-fill si une seule commune correspond au CP et que ville vide
+      if (names.length === 1 && !f.ville) {
+        setF((p) => ({ ...p, ville: names[0] ?? '' }))
+      }
+    })
+    return () => { cancelled = true }
+  }, [f.codePostal, f.ville])
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -399,12 +435,37 @@ function ClientFormModal({
       toast.error('Prénom, nom et email sont obligatoires')
       return
     }
+    // Reconstruit le champ legacy "conjoint" (string) à partir des champs
+    // structurés pour préserver la compat avec les vues qui n'ont pas encore
+    // migré (liste clients, recherche, etc.).
+    const conjointLegacy = f.hasConjoint
+      ? `${f.conjointPrenom} ${f.conjointNom}`.trim() || undefined
+      : undefined
     onSave({
-      ...f,
-      conjoint: f.conjoint.trim() || undefined,
+      prenom: f.prenom, nom: f.nom, email: f.email, tel: f.tel,
+      naissance: f.naissance,
+      lieuNaissance: f.lieuNaissance.trim() || undefined,
+      adresse: f.adresse.trim() || undefined,
+      codePostal: f.codePostal.trim() || undefined,
+      ville: f.ville,
+      profession: f.profession,
+      revenuMensuelNet: f.revenuMensuelNet,
+      apporteur: f.apporteur,
+      apporteurId: f.apporteurId,
       notes: f.notes.trim() || undefined,
+      conjoint: conjointLegacy,
+      conjointPrenom: f.hasConjoint ? (f.conjointPrenom.trim() || undefined) : undefined,
+      conjointNom: f.hasConjoint ? (f.conjointNom.trim() || undefined) : undefined,
+      conjointNaissance: f.hasConjoint ? (f.conjointNaissance || undefined) : undefined,
+      conjointLieuNaissance: f.hasConjoint ? (f.conjointLieuNaissance.trim() || undefined) : undefined,
+      conjointTel: f.hasConjoint ? (f.conjointTel.trim() || undefined) : undefined,
+      conjointEmail: f.hasConjoint ? (f.conjointEmail.trim() || undefined) : undefined,
+      conjointProfession: f.hasConjoint ? (f.conjointProfession.trim() || undefined) : undefined,
     })
   }
+
+  const age = ageFromBirthdate(f.naissance)
+  const ageConjoint = ageFromBirthdate(f.conjointNaissance)
 
   return (
     <Modal
@@ -422,54 +483,135 @@ function ClientFormModal({
         </>
       }
     >
-      <form onSubmit={submit} className="grid grid-cols-2 gap-4">
+      <form onSubmit={submit} className="space-y-5">
+        {/* ─── Identité principal ─── */}
         <div>
-          <label className="label">Prénom *</label>
-          <input className="input" value={f.prenom} onChange={(e) => setF({ ...f, prenom: e.target.value })} />
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-gold-700 mb-2">Identité</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Prénom *</label>
+              <input className="input" value={f.prenom} onChange={(e) => setF({ ...f, prenom: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Nom *</label>
+              <input className="input" value={f.nom} onChange={(e) => setF({ ...f, nom: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Email *</label>
+              <input type="email" className="input" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Téléphone</label>
+              <input className="input" value={f.tel} onChange={(e) => setF({ ...f, tel: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">
+                Date de naissance
+                {age !== null && <span className="ml-2 text-[10px] text-navy-500 font-normal">({age} ans)</span>}
+              </label>
+              <input type="date" className="input" value={f.naissance} onChange={(e) => setF({ ...f, naissance: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Lieu de naissance</label>
+              <input className="input" value={f.lieuNaissance} onChange={(e) => setF({ ...f, lieuNaissance: e.target.value })} placeholder="Ville de naissance" />
+            </div>
+            <div>
+              <label className="label">Profession</label>
+              <input className="input" value={f.profession} onChange={(e) => setF({ ...f, profession: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Revenu net mensuel (€)</label>
+              <input type="number" className="input"
+                value={f.revenuMensuelNet === 0 ? '' : f.revenuMensuelNet}
+                placeholder="0"
+                onChange={(e) => setF({ ...f, revenuMensuelNet: Number(e.target.value || 0) })} />
+            </div>
+          </div>
         </div>
+
+        {/* ─── Adresse postale ─── */}
         <div>
-          <label className="label">Nom *</label>
-          <input className="input" value={f.nom} onChange={(e) => setF({ ...f, nom: e.target.value })} />
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-gold-700 mb-2">Adresse</div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="label">Adresse</label>
+              <input className="input" value={f.adresse} onChange={(e) => setF({ ...f, adresse: e.target.value })} placeholder="12 rue des Forges" />
+            </div>
+            <div>
+              <label className="label">Code postal</label>
+              <input className="input" value={f.codePostal}
+                onChange={(e) => setF({ ...f, codePostal: e.target.value.replace(/\D/g, '').slice(0, 5) })}
+                placeholder="39570" maxLength={5} />
+            </div>
+            <div className="col-span-2">
+              <label className="label">
+                Ville d'adresse
+                {cpSuggestions.length > 1 && <span className="ml-2 text-[10px] text-navy-500 font-normal">({cpSuggestions.length} communes pour ce CP)</span>}
+              </label>
+              {cpSuggestions.length > 1 ? (
+                <select className="input" value={f.ville} onChange={(e) => setF({ ...f, ville: e.target.value })}>
+                  <option value="">— Choisir une commune —</option>
+                  {cpSuggestions.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              ) : (
+                <input className="input" value={f.ville} onChange={(e) => setF({ ...f, ville: e.target.value })} placeholder="Ville d'habitation" />
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* ─── Conjoint (coché → bloc complet) ─── */}
         <div>
-          <label className="label">Email *</label>
-          <input type="email" className="input" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+          <label className="inline-flex items-center gap-2 cursor-pointer mb-2">
+            <input type="checkbox" className="accent-gold-500" checked={f.hasConjoint}
+              onChange={(e) => setF({ ...f, hasConjoint: e.target.checked })} />
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-gold-700">Conjoint présent</span>
+          </label>
+          {f.hasConjoint && (
+            <div className="grid grid-cols-2 gap-3 rounded-lg border border-navy-100 bg-navy-50/30 p-3">
+              <div>
+                <label className="label">Prénom</label>
+                <input className="input" value={f.conjointPrenom} onChange={(e) => setF({ ...f, conjointPrenom: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Nom</label>
+                <input className="input" value={f.conjointNom} onChange={(e) => setF({ ...f, conjointNom: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">
+                  Date de naissance
+                  {ageConjoint !== null && <span className="ml-2 text-[10px] text-navy-500 font-normal">({ageConjoint} ans)</span>}
+                </label>
+                <input type="date" className="input" value={f.conjointNaissance} onChange={(e) => setF({ ...f, conjointNaissance: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Lieu de naissance</label>
+                <input className="input" value={f.conjointLieuNaissance} onChange={(e) => setF({ ...f, conjointLieuNaissance: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Téléphone</label>
+                <input className="input" value={f.conjointTel} onChange={(e) => setF({ ...f, conjointTel: e.target.value })} />
+              </div>
+              <div>
+                <label className="label">Email</label>
+                <input type="email" className="input" value={f.conjointEmail} onChange={(e) => setF({ ...f, conjointEmail: e.target.value })} />
+              </div>
+              <div className="col-span-2">
+                <label className="label">Profession</label>
+                <input className="input" value={f.conjointProfession} onChange={(e) => setF({ ...f, conjointProfession: e.target.value })} />
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* ─── Notes ─── */}
+        {/* Note 2026-05 : champ "Apporteur" déplacé sur le dossier (section Meta).
+            L'apporteur est rattaché au dossier, pas au prospect — un même prospect
+            peut avoir 2 dossiers via 2 apporteurs différents. */}
         <div>
-          <label className="label">Téléphone</label>
-          <input className="input" value={f.tel} onChange={(e) => setF({ ...f, tel: e.target.value })} />
-        </div>
-        <div>
-          <label className="label">Date de naissance</label>
-          <input type="date" className="input" value={f.naissance} onChange={(e) => setF({ ...f, naissance: e.target.value })} />
-        </div>
-        <div>
-          <label className="label">Ville</label>
-          <input className="input" value={f.ville} onChange={(e) => setF({ ...f, ville: e.target.value })} />
-        </div>
-        <div>
-          <label className="label">Profession</label>
-          <input className="input" value={f.profession} onChange={(e) => setF({ ...f, profession: e.target.value })} />
-        </div>
-        <div>
-          <label className="label">Revenu net mensuel (€)</label>
-          <input type="number" className="input" value={f.revenuMensuelNet} onChange={(e) => setF({ ...f, revenuMensuelNet: Number(e.target.value) })} />
-        </div>
-        <div>
-          <label className="label">Conjoint (optionnel)</label>
-          <input className="input" value={f.conjoint} onChange={(e) => setF({ ...f, conjoint: e.target.value })} />
-        </div>
-        <div>
-          <label className="label">Apporteur</label>
-          <ApporteurCombobox
-            value={f.apporteur}
-            onChange={(v, id) => setF({ ...f, apporteur: v, apporteurId: id })}
-            placeholder="Tapez ou choisissez dans la base…"
-          />
-        </div>
-        <div className="col-span-2">
-          <label className="label">Notes</label>
-          <textarea className="input min-h-[80px]" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} />
+          <div className="text-[10px] uppercase tracking-wider font-semibold text-gold-700 mb-2">Notes internes</div>
+          <textarea className="input min-h-[80px]" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })}
+            placeholder="Remarques internes : contexte, attentes du prospect, suivi commercial…" />
         </div>
         <button type="submit" className="hidden" />
       </form>

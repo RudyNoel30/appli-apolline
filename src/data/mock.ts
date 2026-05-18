@@ -39,6 +39,19 @@ export type Apporteur = {
   notes?: string
   importeDeCifacil?: boolean
   createdAt: string
+  // ─── Champs business pour faire des chèques (retour Sébastien 2026-05) ───
+  /** N° RCS / SIREN (obligatoire pour agents immobiliers, notaires, promoteurs) */
+  rcs?: string
+  /** Adresse postale complète (rue + n°) pour l'envoi de chèques de rétrocession */
+  adressePro?: string
+  /** Code postal de l'adresse pro */
+  codePostalPro?: string
+  /** Ville pro */
+  villePro?: string
+  /** N° carte T (agents immobiliers) — utile pour vérification réglementaire */
+  carteT?: string
+  /** IBAN pour virement de rétrocession (si l'apporteur préfère le virement au chèque) */
+  iban?: string
 }
 
 export type Client = {
@@ -48,9 +61,29 @@ export type Client = {
   email: string
   tel: string
   naissance: string
+  /** Lieu de naissance (ville) — séparé de la ville d'adresse pour éviter la
+   *  confusion remontée par Sébastien (Besançon en lieu naissance ne doit pas
+   *  écraser la ville d'adresse). */
+  lieuNaissance?: string
+  /** Code postal de l'adresse */
+  codePostal?: string
+  /** Ville d'adresse (≠ lieuNaissance) */
   ville: string
+  /** Adresse postale complète (rue + numéro) */
+  adresse?: string
   profession: string
+  /**
+   * @deprecated Champ texte legacy — utiliser conjointPrenom + conjointNom à
+   * la place. Conservé pour compat avec les anciens prospects.
+   */
   conjoint?: string
+  conjointPrenom?: string
+  conjointNom?: string
+  conjointNaissance?: string
+  conjointLieuNaissance?: string
+  conjointTel?: string
+  conjointEmail?: string
+  conjointProfession?: string
   revenuMensuelNet: number
   dossierIds: string[]
   createdAt: string
@@ -129,13 +162,22 @@ export const apporteurs: Apporteur[] = [
     id: 'A010', nom: 'Recommandation collaborateur', type: 'Interne',
     notes: "Recommandations entre courtiers Extr'Apol.", createdAt: '2024-01-15',
   },
+  // Apporteurs propres à Sébastien (retour beta 2026-05) — données à
+  // compléter manuellement par Rudy depuis Cifacil. RCS, adresse pro et IBAN
+  // sont nécessaires pour les chèques de rétrocession.
+  {
+    id: 'A011', nom: 'Jean-Luc Moissonnier', type: 'Agent immobilier',
+    societe: 'À renseigner depuis Cifacil', ville: 'Lons-le-Saunier',
+    notes: 'Apporteur de Sébastien — compléter RCS + adresse pro depuis l\'export Cifacil avant le premier chèque.',
+    createdAt: '2026-05-01',
+  },
 ]
 
 export type Civilite = 'M.' | 'Mme' | 'Mlle'
 export type SituationFamiliale = 'Célibataire' | 'Marié(e)' | 'Pacsé(e)' | 'Divorcé(e)' | 'Veuf(ve)' | 'Concubinage'
 export type RegimeMatrimonial = 'Communauté légale' | 'Séparation de biens' | 'Communauté universelle' | 'Participation aux acquêts' | 'N/A'
 export type StatutOccupation = 'Locataire' | 'Propriétaire' | 'Hébergé' | 'Logement de fonction' | 'HLM' | 'Logé à titre gratuit'
-export type TypeContrat = 'CDI' | 'CDD' | 'Période d\'essai' | 'Fonctionnaire' | 'Indépendant' | 'Gérant majoritaire' | 'Profession libérale' | 'Retraité' | 'Sans emploi' | 'Étudiant'
+export type TypeContrat = 'CDI' | 'CDD' | 'Période d\'essai' | 'Fonctionnaire' | 'Indépendant' | 'Gérant majoritaire' | 'Profession libérale' | 'Auto-entrepreneur' | 'Retraité' | 'Sans emploi' | 'Étudiant'
 export type TypeAchat = 'Ancien' | 'Neuf' | 'VEFA' | 'Construction' | 'Terrain' | 'Rachat' | 'Travaux'
 export type Destination = 'Résidence principale' | 'Résidence secondaire' | 'Locatif' | 'Mixte' | 'Pro'
 export type TypeLogement = 'Maison' | 'Appartement' | 'Terrain' | 'Local commercial' | 'Immeuble' | 'Studio'
@@ -165,7 +207,9 @@ export type BienPatrimoine = {
 
 export type DroitEpargneLogement = {
   id: string
-  type: 'PEL' | 'CEL' | 'Plan d\'épargne'
+  type: 'PEL' | 'CEL' | 'Plan d\'épargne' | 'Livret A' | 'LDD' | 'LEP' | 'Assurance-vie' | 'PEA' | 'PER' | 'Compte courant' | 'Autre'
+  /** Solde / capital ÉL épargné (€). Pour PEL/CEL anciens c'est aussi le
+   *  montant des droits acquis (utilisable comme apport). */
   droits: number
   cedes: boolean
   titulaire: string
@@ -828,6 +872,42 @@ export const collaborateurs: Collaborateur[] = [
     actif: true,
     dossiersAssignes: 0,
     bio: 'Agenda, rappels R1, relances pièces & accueil.',
+  },
+  // Back office Sébastien (retour beta 2026-05) — comptes à compléter avec
+  // emails + mots de passe réels avant le passage en prod.
+  {
+    id: 'U005',
+    prenom: 'Marion',
+    nom: 'Hernou',
+    email: 'marion.hernou@groupe-apolline.fr',
+    role: 'gestionnaire',
+    roleLabel: 'Back office',
+    telephone: '',
+    motDePasse: 'apolline2026',
+    avatarGradient: 'from-teal-700 to-teal-900',
+    avatarAccent: 'text-teal-100',
+    creeLe: '2026-05-01',
+    dernierAcces: '2026-05-01T00:00:00',
+    actif: true,
+    dossiersAssignes: 0,
+    bio: 'Back office — montage dossier & relances pièces.',
+  },
+  {
+    id: 'U006',
+    prenom: 'Apolline',
+    nom: 'Aujard',
+    email: 'apolline.aujard@groupe-apolline.fr',
+    role: 'gestionnaire',
+    roleLabel: 'Back office',
+    telephone: '',
+    motDePasse: 'apolline2026',
+    avatarGradient: 'from-violet-700 to-violet-900',
+    avatarAccent: 'text-violet-100',
+    creeLe: '2026-05-01',
+    dernierAcces: '2026-05-01T00:00:00',
+    actif: true,
+    dossiersAssignes: 0,
+    bio: 'Back office — coordination dossiers Apolline.',
   },
 ]
 
