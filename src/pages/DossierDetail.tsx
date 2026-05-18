@@ -334,12 +334,28 @@ export default function DossierDetail() {
                   }} currentColor={stat.color} />
                   {/* Badge HCSF utilise le calcul LIVE (liveHcsfOk) — pas le
                       snapshot dossier.hcsfOk qui est stale dès qu'on ajoute/modifie
-                      des prêts. Sinon BESANA reste affiché "hors norme" même quand
-                      LTV bancaire passe sous 100% après ajout du PTZ. */}
+                      des prêts. On expose aussi LE critère qui échoue dans le label
+                      pour que Sébastien comprenne tout de suite pourquoi c'est rouge. */}
                   {liveHcsfOk ? (
                     <span className="badge-success"><CheckCircle2 className="h-3 w-3" /> HCSF OK</span>
                   ) : (
-                    <span className="badge-danger"><XCircle className="h-3 w-3" /> HCSF hors norme</span>
+                    <span className="badge-danger"
+                      title={[
+                        liveLtv > 1.0 ? `LTV ${pct(liveLtv, 0)} > 100%` : null,
+                        liveDureeMaxMois > 300 ? `Durée ${(liveDureeMaxMois / 12).toFixed(0)} ans > 25 ans` : null,
+                        liveRevenusMensuels > 0 && liveRatioEndettement > 0.35 ? `Endettement ${pct(liveRatioEndettement, 0)} > 35%` : null,
+                      ].filter(Boolean).join(' · ') || 'HCSF hors norme'}>
+                      <XCircle className="h-3 w-3" /> HCSF hors norme
+                      {(() => {
+                        // Affiche un mini-suffixe explicite : "(endettement)" / "(LTV)" / "(durée)" / "(multi)"
+                        const reasons: string[] = []
+                        if (liveLtv > 1.0) reasons.push('LTV')
+                        if (liveDureeMaxMois > 300) reasons.push('durée')
+                        if (liveRevenusMensuels > 0 && liveRatioEndettement > 0.35) reasons.push('endettement')
+                        if (reasons.length === 0) return null
+                        return <span className="ml-1 text-[10px] opacity-80">({reasons.join(', ')})</span>
+                      })()}
+                    </span>
                   )}
                   {client.statutCommercial === 'client' ? (
                     <span className="badge-success" title={client.mandatEnvoyeLe ? `Mandat envoyé le ${dateFr(client.mandatEnvoyeLe)}` : 'Client sous mandat'}>
