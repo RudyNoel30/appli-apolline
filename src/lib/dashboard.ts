@@ -24,6 +24,10 @@ function computeLiveHcsf(d: Dossier, dossierPrets: Pret[]): { ltv: number; hcsfO
   }
   const ltv = computeLtvBancaire(dossierPrets, d)
   const dureeMaxMois = dossierPrets.reduce((m, p) => Math.max(m, p.dureeMois ?? 0), 0)
+  // Note : ce calcul "side-dashboard" ne vérifie PAS l'endettement (pas d'accès
+  // direct aux mensualités calculées + revenus ici). Le badge de DossierDetail
+  // est plus complet. On reste donc sur LTV + durée — suffisant pour détecter
+  // les cas vraiment "hors norme HCSF" depuis le tableau de bord.
   const hcsfOk = ltv <= 1.0 && dureeMaxMois <= 300
   return { ltv, hcsfOk }
 }

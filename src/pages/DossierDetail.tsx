@@ -136,9 +136,14 @@ export default function DossierDetail() {
     ? liveMensualiteTotale / liveRevenusMensuels
     : 0
 
-  // HCSF en temps réel : taux endettement ≤ 35 %, durée ≤ 25 ans (300 mois), LTV ≤ 100 %
-  const liveHcsfOk = liveRatioEndettement > 0
-    && liveRatioEndettement <= 0.35
+  // HCSF en temps réel : taux endettement ≤ 35 %, durée ≤ 25 ans (300 mois), LTV ≤ 100 %.
+  // ⚠ Si les revenus du foyer ne sont pas encore saisis (rfMenage=0), le ratio
+  // d'endettement vaut 0 → on N'écrase PAS HCSF avec un faux positif. On ignore
+  // le critère endettement faute de données (l'utilisateur verra "à compléter"
+  // côté revenus). Bug reporté par Sébastien sur BESANA (LTV 95%, durée OK, mais
+  // HCSF affiché hors norme parce que revenus pas encore saisis).
+  const ratioEndettementOk = liveRevenusMensuels === 0 || liveRatioEndettement <= 0.35
+  const liveHcsfOk = ratioEndettementOk
     && liveDureeMaxMois <= 300
     && liveLtv <= 1.0
 
@@ -327,7 +332,11 @@ export default function DossierDetail() {
                       }, 600)
                     }
                   }} currentColor={stat.color} />
-                  {dossier.hcsfOk ? (
+                  {/* Badge HCSF utilise le calcul LIVE (liveHcsfOk) — pas le
+                      snapshot dossier.hcsfOk qui est stale dès qu'on ajoute/modifie
+                      des prêts. Sinon BESANA reste affiché "hors norme" même quand
+                      LTV bancaire passe sous 100% après ajout du PTZ. */}
+                  {liveHcsfOk ? (
                     <span className="badge-success"><CheckCircle2 className="h-3 w-3" /> HCSF OK</span>
                   ) : (
                     <span className="badge-danger"><XCircle className="h-3 w-3" /> HCSF hors norme</span>
