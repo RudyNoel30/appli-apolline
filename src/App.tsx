@@ -414,9 +414,13 @@ function useBackendSyncResume() {
         const msg = e instanceof Error ? e.message : String(e)
         console.warn('[sync] pullAll threw', msg)
         if (initial) {
-          toast.error('Synchronisation impossible', {
-            description: msg.slice(0, 200),
-            duration: 8000,
+          // Niveau warning (jaune) au lieu d'error (rouge) : la sync échoue
+          // souvent transitoirement au boot (DNS lent, WiFi pas encore prêt
+          // au lancement Windows) et se rétablit toute seule au prochain pull.
+          // Pas la peine de paniquer Sébastien avec une alerte rouge.
+          toast.warning('Synchronisation indisponible', {
+            description: `${msg.slice(0, 160)} — un nouvel essai a lieu automatiquement.`,
+            duration: 6000,
           })
         }
       }
