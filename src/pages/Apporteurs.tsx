@@ -289,7 +289,7 @@ function ApporteurFormModal({
             <div className="col-span-2">
               <label className="label">Nom *</label>
               <input className="input" value={f.nom} onChange={(e) => setF({ ...f, nom: e.target.value })}
-                placeholder="ex: Jean-Luc Moissonnier" />
+                placeholder="Nom complet (prénom + nom, ou raison sociale)" />
             </div>
             <div>
               <label className="label">Type *</label>
@@ -300,7 +300,7 @@ function ApporteurFormModal({
             <div className="col-span-2">
               <label className="label">Société</label>
               <input className="input" value={f.societe} onChange={(e) => setF({ ...f, societe: e.target.value })}
-                placeholder="ex: Agence Foncia Lons" />
+                placeholder="Raison sociale / nom de l'agence" />
             </div>
             <div>
               <label className="label">Ville (siège)</label>
