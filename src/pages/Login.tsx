@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type FormEvent } from 'react'
+import { useState, useRef, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, Shield } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
@@ -10,35 +10,31 @@ export default function Login() {
   const { login, collaborateurs } = useAuth()
   const navigate = useNavigate()
 
-  const [email, setEmail] = useState('')
-  const [motDePasse, setMotDePasse] = useState('')
+  // ⚠️ INPUTS UNCONTROLLED (defaultValue + ref) au lieu de controlled (value + state).
+  // Pourquoi : Sébastien (retour beta 2026-05) reportait que le curseur sortait tout
+  // seul de la case email pendant la frappe. La cause : chaque frappe déclenchait
+  // setState → re-render de Login → si quoi que ce soit dans App.tsx provoque un
+  // re-render de l'App en parallèle (zustand store update, MSAL bind async,
+  // updater check…), le combo recreate l'input ou perd le focus dans WebView2.
+  // Avec des refs, le DOM ne re-render JAMAIS pendant la frappe — le focus tient.
+  const emailRef = useRef<HTMLInputElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
-  // Focus programmatique sur l'email UNIQUEMENT au 1er mount (jamais après).
-  // L'attribut React `autoFocus` peut se re-déclencher sur certains re-mounts
-  // et faire sauter le curseur du password vers l'email pendant la frappe.
-  const emailRef = useRef<HTMLInputElement>(null)
-  const focusedOnceRef = useRef(false)
-  useEffect(() => {
-    if (focusedOnceRef.current) return
-    focusedOnceRef.current = true
-    emailRef.current?.focus()
-  }, [])
-
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    const email = emailRef.current?.value?.trim() ?? ''
+    const motDePasse = passwordRef.current?.value ?? ''
     if (!email || !motDePasse) {
       setError('Veuillez renseigner l\'identifiant et le mot de passe.')
       return
     }
     setLoading(true)
     setError(null)
-    // Pas de délai artificiel — Sébastien (retour beta 2026-05) trouvait que
-    // le timer fake faisait perdre du temps à chaque connexion.
     try {
       const res = await login(email, motDePasse)
       if (!res.ok) {
@@ -55,9 +51,10 @@ export default function Login() {
   }
 
   const prefillAccount = (emailAddr: string) => {
-    setEmail(emailAddr)
-    setMotDePasse('')
+    if (emailRef.current) emailRef.current.value = emailAddr
+    if (passwordRef.current) passwordRef.current.value = ''
     setError(null)
+    passwordRef.current?.focus()
   }
 
   return (
@@ -105,15 +102,20 @@ export default function Login() {
                 id="email"
                 ref={emailRef}
                 name="apolline-identifiant"
-                type="email"
+                // type="text" (et pas "email") pour ne pas déclencher l'autofill
+                // agressif de WebView2 Tauri qui peut perturber la frappe (proposition
+                // d'emails enregistrés → vole le focus). On garde la sémantique email
+                // dans le placeholder et la validation côté serveur.
+                type="text"
+                inputMode="email"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck={false}
                 data-lpignore="true"
                 data-form-type="other"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(null) }}
+                defaultValue=""
+                onFocus={() => setError(null)}
                 placeholder="prenom@groupe-apolline.fr"
                 disabled={loading || success}
                 className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-white placeholder:text-navy-400 focus:border-gold-500 focus:bg-white/[0.07] focus:ring-2 focus:ring-gold-500/30 outline-none transition-all duration-200 disabled:opacity-50"
@@ -139,10 +141,11 @@ export default function Login() {
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-navy-400 group-focus-within:text-gold-400 transition-colors" />
               <input
                 id="password"
+                ref={passwordRef}
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
-                value={motDePasse}
-                onChange={(e) => { setMotDePasse(e.target.value); setError(null) }}
+                defaultValue=""
+                onFocus={() => setError(null)}
                 placeholder="••••••••••••"
                 disabled={loading || success}
                 className="w-full pl-10 pr-10 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-white placeholder:text-navy-400 focus:border-gold-500 focus:bg-white/[0.07] focus:ring-2 focus:ring-gold-500/30 outline-none transition-all duration-200 disabled:opacity-50"
@@ -221,7 +224,6 @@ export default function Login() {
                       'h-9 w-9 rounded-full bg-gradient-to-br flex items-center justify-center font-serif text-xs font-semibold transition-all duration-200 hover:scale-110 hover:ring-2 hover:ring-gold-500/50',
                       c.avatarGradient,
                       c.avatarAccent,
-                      email === c.email && 'ring-2 ring-gold-500 scale-110',
                     )}
                   >
                     {initials(c.prenom + ' ' + c.nom)}
