@@ -18,8 +18,8 @@ import {
 } from '@/data/mock'
 import { cn, eur } from '@/lib/utils'
 import { calcFraisNotaireDetail, type NatureBienNotaire } from '@/lib/finance'
-import { communesByCodePostal } from '@/lib/geo'
 import { ageFromBirthdate, anciennetelnYears, anciennetelnLabel } from '@/lib/age'
+import CodePostalVilleField, { CodePostalVilleSingleField } from '@/components/CodePostalVilleField'
 
 type EditorState = {
   // Emprunteurs
@@ -663,22 +663,6 @@ function EmprunteurIdentite({ e, updateE, title, hideHeader, principal }: {
   principal?: Emprunteur
 }) {
   const age = ageFromBirthdate(e.naissance)
-  // Suggestions de communes pour le code postal saisi
-  const [cpSuggestions, setCpSuggestions] = useState<string[]>([])
-  useEffect(() => {
-    const cp = e.codePostal ?? ''
-    if (!/^\d{5}$/.test(cp)) { setCpSuggestions([]); return }
-    let cancelled = false
-    void communesByCodePostal(cp).then((rows) => {
-      if (cancelled) return
-      const names = rows.map((r) => r.nom)
-      setCpSuggestions(names)
-      // Auto-remplit ville si une seule commune correspond et que ville vide
-      if (names.length === 1 && !e.ville) updateE('ville', names[0] ?? '')
-    })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e.codePostal])
 
   const copyAdresseFromPrincipal = () => {
     if (!principal) return
@@ -718,23 +702,14 @@ function EmprunteurIdentite({ e, updateE, title, hideHeader, principal }: {
       )}
       <div className="grid grid-cols-6 gap-3 mt-2">
         <Field label="Adresse" value={e.adresse} onChange={(v) => updateE('adresse', v)} span={4} placeholder="12 rue des Forges" />
-        <Field
-          label="Code postal"
-          value={e.codePostal}
-          onChange={(v) => updateE('codePostal', String(v).replace(/\D/g, '').slice(0, 5))}
-          placeholder="39570"
+        <CodePostalVilleField
+          codePostal={e.codePostal}
+          ville={e.ville}
+          onCodePostalChange={(v) => updateE('codePostal', v)}
+          onVilleChange={(v) => updateE('ville', v)}
+          cpSpan={1}
+          villeSpan={1}
         />
-        {cpSuggestions.length > 1 ? (
-          <div className="col-span-1">
-            <label className="label">Ville</label>
-            <select className="input" value={e.ville} onChange={(ev) => updateE('ville', ev.target.value)}>
-              <option value="">— Choisir —</option>
-              {cpSuggestions.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-        ) : (
-          <Field label="Ville" value={e.ville} onChange={(v) => updateE('ville', v)} />
-        )}
         <Field label="Adresse (suite)" value={e.adresseSuite} onChange={(v) => updateE('adresseSuite', v)} span={6} />
       </div>
       <div className="grid grid-cols-3 gap-3 mt-4">
@@ -1187,7 +1162,14 @@ function SectionProjet({ s, update, coutTotal, autoFraisNotaire, setAutoFraisNot
             options={['Résidence principale', 'Résidence secondaire', 'Locatif', 'Mixte', 'Pro']} />
           <Select label="Type de logement" value={s.typeLogement} onChange={(v) => update('typeLogement', v as TypeLogement)}
             options={['Maison', 'Appartement', 'Terrain', 'Local commercial', 'Immeuble', 'Studio']} />
-          <Field label="Ville du bien" value={s.villeBien} onChange={(v) => update('villeBien', v)} required span={2} />
+          <CodePostalVilleSingleField
+            value={s.villeBien}
+            onChange={(v) => update('villeBien', v)}
+            label="Code postal + Ville du bien"
+            required
+            span={2}
+            placeholder="39570 Conliège"
+          />
           <div className="flex items-end pb-1">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={s.compromisSigne} onChange={(e) => update('compromisSigne', e.target.checked)} className="accent-gold-500 h-4 w-4" />

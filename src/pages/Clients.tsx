@@ -9,7 +9,7 @@ import type { Client } from '@/data/mock'
 import { dateFr, eur, initials, cn } from '@/lib/utils'
 import ApporteurCombobox from '@/components/ApporteurCombobox'
 import { exportToXlsx } from '@/lib/excelExport'
-import { communesByCodePostal } from '@/lib/geo'
+import CodePostalVilleField from '@/components/CodePostalVilleField'
 import { ageFromBirthdate } from '@/lib/age'
 
 
@@ -412,22 +412,8 @@ function ClientFormModal({
     conjointProfession: initial?.conjointProfession ?? '',
   })
 
-  // Suggestions code postal → ville (geo.api.gouv.fr)
-  const [cpSuggestions, setCpSuggestions] = useState<string[]>([])
-  useEffect(() => {
-    if (!/^\d{5}$/.test(f.codePostal)) { setCpSuggestions([]); return }
-    let cancelled = false
-    void communesByCodePostal(f.codePostal).then((rows) => {
-      if (cancelled) return
-      const names = rows.map((r) => r.nom)
-      setCpSuggestions(names)
-      // Auto-fill si une seule commune correspond au CP et que ville vide
-      if (names.length === 1 && !f.ville) {
-        setF((p) => ({ ...p, ville: names[0] ?? '' }))
-      }
-    })
-    return () => { cancelled = true }
-  }, [f.codePostal, f.ville])
+  // Note: la logique d'autocomplete CP→ville est maintenant dans
+  // <CodePostalVilleField> (cf. components/CodePostalVilleField.tsx).
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -533,30 +519,20 @@ function ClientFormModal({
         <div>
           <div className="text-[10px] uppercase tracking-wider font-semibold text-gold-700 mb-2">Adresse</div>
           <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
+            <div className="col-span-3">
               <label className="label">Adresse</label>
               <input className="input" value={f.adresse} onChange={(e) => setF({ ...f, adresse: e.target.value })} placeholder="12 rue des Forges" />
             </div>
-            <div>
-              <label className="label">Code postal</label>
-              <input className="input" value={f.codePostal}
-                onChange={(e) => setF({ ...f, codePostal: e.target.value.replace(/\D/g, '').slice(0, 5) })}
-                placeholder="39570" maxLength={5} />
-            </div>
-            <div className="col-span-2">
-              <label className="label">
-                Ville d'adresse
-                {cpSuggestions.length > 1 && <span className="ml-2 text-[10px] text-navy-500 font-normal">({cpSuggestions.length} communes pour ce CP)</span>}
-              </label>
-              {cpSuggestions.length > 1 ? (
-                <select className="input" value={f.ville} onChange={(e) => setF({ ...f, ville: e.target.value })}>
-                  <option value="">— Choisir une commune —</option>
-                  {cpSuggestions.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              ) : (
-                <input className="input" value={f.ville} onChange={(e) => setF({ ...f, ville: e.target.value })} placeholder="Ville d'habitation" />
-              )}
-            </div>
+            <CodePostalVilleField
+              codePostal={f.codePostal}
+              ville={f.ville}
+              onCodePostalChange={(v) => setF({ ...f, codePostal: v })}
+              onVilleChange={(v) => setF({ ...f, ville: v })}
+              cpSpan={1}
+              villeSpan={2}
+              villeLabel="Ville d'adresse"
+              placeholder={{ cp: '39570', ville: 'Ville d\'habitation' }}
+            />
           </div>
         </div>
 
