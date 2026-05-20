@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   Users, FileCheck2, Coins, AlertCircle, ArrowUpRight, CalendarDays,
   ChevronRight, Download, CheckCircle2,
@@ -15,6 +16,7 @@ import { STATUTS } from '@/data/mock'
 import { useStore } from '@/stores/useStore'
 import { useAuth } from '@/auth/AuthContext'
 import { computeAlertes, computeEncaissementsMensuels, computeEncaissementsMois, computeTachesJour, type Tache } from '@/lib/dashboard'
+import { useChartTheme } from '@/theme/useChartTheme'
 import type { Statut } from '@/data/mock'
 
 function Kpi({ icon: Icon, label, value, trend, hint, color = 'navy', delay = 0 }: {
@@ -60,41 +62,76 @@ export default function Dashboard() {
   // prets nécessaire pour recalculer la LTV bancaire live (vs le snapshot stocké
   // dans dossier.ltv qui peut être stale après ajout/modification de prêts).
   const prets = useStore((s) => s.prets)
+  // Palette graphiques qui suit le thème actif (Apolline / Graphite / Sombre)
+  const chart = useChartTheme()
   const { currentUser } = useAuth()
   const greetingName = currentUser?.prenom?.trim() || currentUser?.nom?.trim() || 'collaborateur'
 
-  const today = new Date()
-  const todayLabel = today.toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
+  // `today` est stable PAR RENDER, sinon chaque keypress dans un input quelque
+  // part déstabilise toutes les deps useMemo en aval. On le calcule UNE fois
+  // au mount — pour le rare cas du minuit lors d'une session ouverte, l'écart
+  // est négligeable (et un F5 corrige).
+  const { today, todayLabel, moisCourantLabel } = useMemo(() => {
+    const t = new Date()
+    return {
+      today: t,
+      todayLabel: t.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+      moisCourantLabel: t.toLocaleDateString('fr-FR', { month: 'long' }),
+    }
+  }, [])
 
-  const counts: Record<Statut, number> = {
-    R0: 0, R1_prevu: 0, R1_fait: 0, Montage: 0, Envoi_banque: 0,
-    Accord: 0, Offre_editee: 0, Signe: 0, Encaisse: 0, Abandonne: 0,
-  }
-  dossiers.forEach((d) => { counts[d.statut]++ })
+  // Statistiques dossiers — recalculées uniquement quand `dossiers` change.
+  const { counts, totalActifs, enAttente, signesMois } = useMemo(() => {
+    const c: Record<Statut, number> = {
+      R0: 0, R1_prevu: 0, R1_fait: 0, Montage: 0, Envoi_banque: 0,
+      Accord: 0, Offre_editee: 0, Signe: 0, Encaisse: 0, Abandonne: 0,
+    }
+    let actifs = 0, attente = 0, signes = 0
+    for (const d of dossiers) {
+      c[d.statut]++
+      if (d.statut !== 'Encaisse' && d.statut !== 'Abandonne') actifs++
+      if (d.statut === 'Envoi_banque' || d.statut === 'Montage') attente++
+      if (d.statut === 'Signe' || d.statut === 'Encaisse') signes++
+    }
+    return { counts: c, totalActifs: actifs, enAttente: attente, signesMois: signes }
+  }, [dossiers])
 
-  const totalActifs = dossiers.filter((d) => !['Encaisse', 'Abandonne'].includes(d.statut)).length
-  const enAttente = dossiers.filter((d) => ['Envoi_banque', 'Montage'].includes(d.statut)).length
-  const signesMois = dossiers.filter((d) => d.statut === 'Signe' || d.statut === 'Encaisse').length
-  // Encaissements / commissions calculés depuis le store (table commissions)
-  const encaissementsMensuels = computeEncaissementsMensuels(commissions, today)
-  const commissionsMois = computeEncaissementsMois(commissions, today)
-  const moisCourantLabel = today.toLocaleDateString('fr-FR', { month: 'long' })
-  // Alertes calculées depuis l'état des dossiers / RDV (LTV recalculée live depuis les prêts)
-  const alertesGlobales = computeAlertes(dossiers, rdvs, prets, today)
-  // Tâches actionnables du jour (RDV + relances + pièces + HCSF + stagnation)
-  const tachesJour = computeTachesJour(dossiers, rdvs, prets, today)
-  const nbProspects = clients.filter((c) => c.statutCommercial === 'prospect').length
-  const nbClients = clients.filter((c) => c.statutCommercial === 'client').length
-  const prochainsRdv = [...rdvs]
-    .filter((r) => new Date(r.date).getTime() >= today.getTime())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 4)
+  // Encaissements / commissions — recalculés uniquement quand `commissions` change.
+  const encaissementsMensuels = useMemo(() => computeEncaissementsMensuels(commissions, today), [commissions, today])
+  const commissionsMois = useMemo(() => computeEncaissementsMois(commissions, today), [commissions, today])
 
-  const pipelineChart = STATUTS
-    .filter((s) => !['Encaisse', 'Abandonne'].includes(s.key))
-    .map((s) => ({ name: s.label, dossiers: counts[s.key] }))
+  // Alertes + tâches du jour — recalculées quand dossiers/rdvs/prets changent.
+  // Ces fonctions itèrent N×M (filter prêts par dossier dans la boucle), donc
+  // mémoïsation cruciale pour ne pas retomber sur O(D×P) à chaque render.
+  const alertesGlobales = useMemo(() => computeAlertes(dossiers, rdvs, prets, today), [dossiers, rdvs, prets, today])
+  const tachesJour = useMemo(() => computeTachesJour(dossiers, rdvs, prets, today), [dossiers, rdvs, prets, today])
+
+  // Compteurs clients — recalculés uniquement quand `clients` change.
+  const { nbProspects, nbClients } = useMemo(() => {
+    let p = 0, c = 0
+    for (const cl of clients) {
+      if (cl.statutCommercial === 'prospect') p++
+      else if (cl.statutCommercial === 'client') c++
+    }
+    return { nbProspects: p, nbClients: c }
+  }, [clients])
+  // 4 prochains RDV à venir — recalculé quand rdvs change. On utilise
+  // localeCompare sur les ISO strings (= comparaison alphabétique = ordre
+  // chronologique pour ISO 8601), évite un new Date() par item.
+  const prochainsRdv = useMemo(() => {
+    const todayMs = today.getTime()
+    return [...rdvs]
+      .filter((r) => new Date(r.date).getTime() >= todayMs)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 4)
+  }, [rdvs, today])
+
+  // Données du barchart pipeline — dérive de `counts` (déjà mémoïsé).
+  const pipelineChart = useMemo(() =>
+    STATUTS
+      .filter((s) => !['Encaisse', 'Abandonne'].includes(s.key))
+      .map((s) => ({ name: s.label, dossiers: counts[s.key] })),
+    [counts])
 
   const exportXlsx = async () => {
     const path = await exportToXlsx({
@@ -272,15 +309,15 @@ export default function Dashboard() {
           </div>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={encaissementsMensuels} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid stroke="#E3E8F2" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="mois" tick={{ fill: '#4F6696', fontSize: 12 }} axisLine={{ stroke: '#BEC9DF' }} />
-              <YAxis tick={{ fill: '#4F6696', fontSize: 12 }} axisLine={{ stroke: '#BEC9DF' }} tickFormatter={(v) => `${v / 1000}k`} />
+              <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="mois" tick={{ fill: chart.text, fontSize: 12 }} axisLine={{ stroke: chart.grid }} />
+              <YAxis tick={{ fill: chart.text, fontSize: 12 }} axisLine={{ stroke: chart.grid }} tickFormatter={(v) => `${v / 1000}k`} />
               <Tooltip
-                contentStyle={{ backgroundColor: '#0A1F3D', border: 'none', borderRadius: 8, color: '#fff' }}
+                contentStyle={{ backgroundColor: chart.tooltip.bg, border: `1px solid ${chart.tooltip.border}`, borderRadius: 8, color: chart.tooltip.text }}
                 formatter={(v: number) => eur(v)}
               />
-              <Line type="monotone" dataKey="brut" stroke="#142B5C" strokeWidth={2.5} dot={{ r: 4, fill: '#142B5C' }} />
-              <Line type="monotone" dataKey="net" stroke="#C9A961" strokeWidth={2.5} dot={{ r: 4, fill: '#C9A961' }} />
+              <Line type="monotone" dataKey="brut" stroke={chart.series[2]} strokeWidth={2.5} dot={{ r: 4, fill: chart.series[2] }} />
+              <Line type="monotone" dataKey="net" stroke={chart.secondary} strokeWidth={2.5} dot={{ r: 4, fill: chart.secondary }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -297,11 +334,11 @@ export default function Dashboard() {
           </div>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={pipelineChart} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#E3E8F2" strokeDasharray="3 3" horizontal={false} />
+              <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" horizontal={false} />
               <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" tick={{ fill: '#4F6696', fontSize: 11 }} width={110} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ backgroundColor: '#0A1F3D', border: 'none', borderRadius: 8, color: '#fff' }} />
-              <Bar dataKey="dossiers" fill="#C9A961" radius={[0, 6, 6, 0]} />
+              <YAxis type="category" dataKey="name" tick={{ fill: chart.text, fontSize: 11 }} width={110} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ backgroundColor: chart.tooltip.bg, border: `1px solid ${chart.tooltip.border}`, borderRadius: 8, color: chart.tooltip.text }} />
+              <Bar dataKey="dossiers" fill={chart.secondary} radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

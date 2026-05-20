@@ -5,8 +5,10 @@ import PageHeader from '@/components/PageHeader'
 import { commissions, encaissementsMensuels } from '@/data/mock'
 import { eur, cn } from '@/lib/utils'
 import { exportToXlsx } from '@/lib/excelExport'
+import { useChartTheme } from '@/theme/useChartTheme'
 
 export default function Commissions() {
+  const chart = useChartTheme()
   const totalBrut = commissions.reduce((s, c) => s + c.brut, 0)
   const totalNet = commissions.reduce((s, c) => s + c.net, 0)
   const totalGsupport = commissions.reduce((s, c) => s + c.gsupport, 0)
@@ -17,7 +19,7 @@ export default function Commissions() {
     return acc
   }, {})
   const pieData = Object.entries(parBanque).map(([name, value]) => ({ name, value }))
-  const colors = ['#0A1F3D', '#C9A961', '#142B5C', '#8A6B2E', '#2E4779']
+  const colors = chart.series
 
   return (
     <>
@@ -90,13 +92,13 @@ export default function Commissions() {
           <div className="divider-gold mb-4" />
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={encaissementsMensuels} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid stroke="#E3E8F2" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="mois" tick={{ fill: '#4F6696', fontSize: 12 }} axisLine={{ stroke: '#BEC9DF' }} />
-              <YAxis tick={{ fill: '#4F6696', fontSize: 12 }} axisLine={{ stroke: '#BEC9DF' }} tickFormatter={(v) => `${v / 1000}k`} />
-              <Tooltip contentStyle={{ backgroundColor: '#0A1F3D', border: 'none', borderRadius: 8, color: '#fff' }} formatter={(v: number) => eur(v)} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="brut" fill="#142B5C" radius={[6, 6, 0, 0]} name="Brut" />
-              <Bar dataKey="net" fill="#C9A961" radius={[6, 6, 0, 0]} name="Net" />
+              <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="mois" tick={{ fill: chart.text, fontSize: 12 }} axisLine={{ stroke: chart.grid }} />
+              <YAxis tick={{ fill: chart.text, fontSize: 12 }} axisLine={{ stroke: chart.grid }} tickFormatter={(v) => `${v / 1000}k`} />
+              <Tooltip contentStyle={{ backgroundColor: chart.tooltip.bg, border: `1px solid ${chart.tooltip.border}`, borderRadius: 8, color: chart.tooltip.text }} formatter={(v: number) => eur(v)} />
+              <Legend wrapperStyle={{ fontSize: 12, color: chart.text }} />
+              <Bar dataKey="brut" fill={chart.series[2]} radius={[6, 6, 0, 0]} name="Brut" />
+              <Bar dataKey="net" fill={chart.secondary} radius={[6, 6, 0, 0]} name="Net" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -109,7 +111,7 @@ export default function Commissions() {
               <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2} dataKey="value">
                 {pieData.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
               </Pie>
-              <Tooltip contentStyle={{ backgroundColor: '#0A1F3D', border: 'none', borderRadius: 8, color: '#fff' }} formatter={(v: number) => eur(v)} />
+              <Tooltip contentStyle={{ backgroundColor: chart.tooltip.bg, border: `1px solid ${chart.tooltip.border}`, borderRadius: 8, color: chart.tooltip.text }} formatter={(v: number) => eur(v)} />
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-1.5 mt-3">

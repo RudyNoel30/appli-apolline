@@ -7,11 +7,13 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { ai, type AiUsageStats, type AiSkillInfo } from '@/db/api'
 import { useAuth, usePermissions } from '@/auth/AuthContext'
 import { dateTimeFr } from '@/lib/utils'
+import { useChartTheme } from '@/theme/useChartTheme'
 
 const eur4 = (n: number): string =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n)
 
 export default function AiUsagePane() {
+  const chart = useChartTheme()
   const [days, setDays] = useState(30)
   const [stats, setStats] = useState<AiUsageStats | null>(null)
   const [skills, setSkills] = useState<AiSkillInfo[]>([])
@@ -161,12 +163,12 @@ export default function AiUsagePane() {
                 <div className="text-[11px] uppercase tracking-wider text-navy-500 font-semibold mb-2">Coût par jour (€)</div>
                 <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={stats.byDay} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="#E3E8F2" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="day" tick={{ fill: '#4F6696', fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
-                    <YAxis tick={{ fill: '#4F6696', fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(2)} €`} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0A1F3D', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }}
+                    <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fill: chart.text, fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
+                    <YAxis tick={{ fill: chart.text, fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(2)} €`} />
+                    <Tooltip contentStyle={{ backgroundColor: chart.tooltip.bg, border: `1px solid ${chart.tooltip.border}`, borderRadius: 8, color: chart.tooltip.text, fontSize: 12 }}
                       formatter={(v: number, name: string) => [name === 'cost' ? eur4(v) : v, name === 'cost' ? 'Coût' : 'Nb gen']} />
-                    <Line type="monotone" dataKey="cost" stroke="#C9A961" strokeWidth={2.5} dot={{ r: 3, fill: '#C9A961' }} />
+                    <Line type="monotone" dataKey="cost" stroke={chart.secondary} strokeWidth={2.5} dot={{ r: 3, fill: chart.secondary }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -177,12 +179,12 @@ export default function AiUsagePane() {
                 <div className="text-[11px] uppercase tracking-wider text-navy-500 font-semibold mb-2">Par skill</div>
                 <ResponsiveContainer width="100%" height={Math.max(80, stats.bySkill.length * 28)}>
                   <BarChart data={stats.bySkill.map((s) => ({ ...s, label: skillLabel(s.skill) }))} layout="vertical" margin={{ top: 0, right: 10, left: 130, bottom: 0 }}>
-                    <CartesianGrid stroke="#E3E8F2" strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fill: '#4F6696', fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(2)} €`} />
-                    <YAxis type="category" dataKey="label" tick={{ fill: '#4F6696', fontSize: 11 }} width={120} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0A1F3D', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }}
+                    <CartesianGrid stroke={chart.grid} strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fill: chart.text, fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(2)} €`} />
+                    <YAxis type="category" dataKey="label" tick={{ fill: chart.text, fontSize: 11 }} width={120} />
+                    <Tooltip contentStyle={{ backgroundColor: chart.tooltip.bg, border: `1px solid ${chart.tooltip.border}`, borderRadius: 8, color: chart.tooltip.text, fontSize: 12 }}
                       formatter={(v: number, name: string) => [name === 'cost' ? eur4(v) : v, name === 'cost' ? 'Coût' : 'Nb']} />
-                    <Bar dataKey="cost" fill="#C9A961" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="cost" fill={chart.secondary} radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

@@ -38,7 +38,10 @@ export default function OneDriveFolderPicker({ open, onClose, onSelect }: Props)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedDriveId, setSelectedDriveId] = useState<string | undefined>(undefined)
+  // selectedDriveId tracking conservé pour potentiel besoin futur (différencier
+  // drive personnel vs partagé). Pour l'instant la valeur n'est pas lue —
+  // setter conservé via préfixe _ pour ne pas casser les callsites existants.
+  const [, setSelectedDriveId] = useState<string | undefined>(undefined)
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<drive.DriveItem[] | null>(null)
   const [searching, setSearching] = useState(false)

@@ -11,10 +11,6 @@ const eur = (n?: number | null): string => {
   if (n === undefined || n === null || isNaN(n)) return '—'
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
 }
-const eurExact = (n?: number | null): string => {
-  if (n === undefined || n === null || isNaN(n)) return '—'
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
-}
 const pct = (n?: number | null, digits = 1): string => {
   if (n === undefined || n === null || isNaN(n)) return '—'
   return new Intl.NumberFormat('fr-FR', { style: 'percent', minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n)
@@ -221,7 +217,7 @@ function headerSection(dossier: Dossier, client: Client): string {
 </div>`
 }
 
-function tabEtatCivil(dossier: Dossier, client: Client, e1: Emprunteur | undefined, e2: Emprunteur | undefined, today: string): string {
+function tabEtatCivil(_dossier: Dossier, client: Client, e1: Emprunteur | undefined, e2: Emprunteur | undefined, today: string): string {
   const age = e1?.naissance ? ageFromBirth(e1.naissance) : ageFromBirth(client.naissance)
   const profession = e1?.profession || client.profession || incomplete
   const situation = e1?.situationFamiliale ?? (client.conjoint ? 'Marié(e)' : 'Célibataire')
@@ -426,7 +422,6 @@ function tabPatrimoine(dossier: Dossier, today: string): string {
   const droitsEL = dossier.droitsEL ?? []
   const totalMensCredits = credits.reduce((s, c) => s + c.mensualite, 0)
   const totalApresRA = credits.filter((c) => c.devenir === 'À conserver' || c.devenir === 'En cours').reduce((s, c) => s + c.mensualite, 0)
-  const epargneTotal = (dossier.emprunteur1?.salaireNet ?? 0) // placeholder
 
   return `
 <div id="patrimoine" class="tab-content">

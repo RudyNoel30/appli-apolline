@@ -16,7 +16,7 @@ import * as mail from '@/o365/mail'
 import * as contacts from '@/o365/contacts'
 import type { GraphMail, GraphMailFull, MailFolder } from '@/o365/mail'
 import { cn, dateTimeFr } from '@/lib/utils'
-import { sanitizeHtml, stripHtml } from '@/lib/sanitizeHtml'
+import { sanitizeHtml } from '@/lib/sanitizeHtml'
 
 function relativeTime(iso?: string): string {
   if (!iso) return ''

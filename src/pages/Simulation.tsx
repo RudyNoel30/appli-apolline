@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Calculator, Download, TrendingDown, Award, Save, Trash2, History } from 'lucide-react'
+import { Download, TrendingDown, Award, Save, Trash2, History } from 'lucide-react'
 import { toast } from 'sonner'
 import PageHeader from '@/components/PageHeader'
 import Modal from '@/components/Modal'

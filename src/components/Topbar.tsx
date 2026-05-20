@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Command, FileText, UserPlus, Calendar, Calculator, Map as MapIcon, FolderOpen } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 import UserMenu from './UserMenu'
 import NotificationCenter from './NotificationCenter'
 import { useStore } from '@/stores/useStore'

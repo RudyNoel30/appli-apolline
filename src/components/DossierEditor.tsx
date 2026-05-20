@@ -204,7 +204,7 @@ export type DossierEditorProps = {
 }
 
 export default function DossierEditor({
-  dossier, client, banques, collaborateurs, onClose, onSave,
+  dossier, client, collaborateurs, onClose, onSave,
   mode = 'edit',
 }: DossierEditorProps) {
   const [section, setSection] = useState<Section>('identite')

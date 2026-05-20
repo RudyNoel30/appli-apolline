@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Shield, AlertTriangle, CheckCircle2, XCircle, Clock, Plus, Trash2, Pencil, GraduationCap,
-  FileText, Calendar, RefreshCw, ExternalLink, Award,
+  FileText, RefreshCw, ExternalLink, Award,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { conformite, type ConformiteCertif, type ConformiteCertifType, type ConformiteFormation, type ConformiteStatus } from '@/db/api'

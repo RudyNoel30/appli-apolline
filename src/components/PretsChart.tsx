@@ -1,6 +1,7 @@
 import { useMemo, type CSSProperties } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, ReferenceLine } from 'recharts'
 import { type Pret, pretCouleur, PRET_TYPE_LABEL } from '@/data/mock'
+import { useChartTheme } from '@/theme/useChartTheme'
 
 type Props = {
   prets: Pret[]
@@ -198,6 +199,10 @@ function mensualiteAt(p: Pret, mois: number): number {
 
 export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props) {
   const sorted = useMemo(() => [...prets].sort((a, b) => a.rang - b.rang), [prets])
+  // Palette des axes/grid/tooltip suit le thème (Apolline/Graphite/Sombre).
+  // Les couleurs PAR PRÊT (colorByPret via pretCouleur) restent inchangées —
+  // c'est l'identité visuelle de chaque prêt à travers l'app.
+  const chart = useChartTheme()
 
   // Échantillonnage : 1 point par mois pour une durée < 24 mois, sinon par trimestre
   const dureeMax = useMemo(() => sorted.reduce((m, p) => Math.max(m, p.dureeMois), 0), [sorted])
@@ -291,16 +296,16 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
       <div style={wrapperStyle}>
         <ResponsiveContainer width="100%" height="100%" debounce={1}>
           <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+            <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
             <XAxis
               dataKey="mois"
               tickFormatter={formatYears}
-              tick={{ fontSize: 11, fill: '#64748B' }}
-              label={{ value: 'Années', position: 'insideBottom', offset: -2, style: { fontSize: 10, fill: '#94A3B8' } }}
+              tick={{ fontSize: 11, fill: chart.text }}
+              label={{ value: 'Années', position: 'insideBottom', offset: -2, style: { fontSize: 10, fill: chart.text } }}
             />
             <YAxis
               tickFormatter={formatEuro}
-              tick={{ fontSize: 11, fill: '#64748B' }}
+              tick={{ fontSize: 11, fill: chart.text }}
             />
             <Tooltip
               labelFormatter={(m) => `Mois ${m} (~${(m / 12).toFixed(1)} ans)`}
@@ -370,20 +375,20 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
                 )
               })}
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+            <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
             <XAxis
               dataKey="mois"
               type="number"
               domain={[0, dureeMax]}
               tickFormatter={formatYears}
-              tick={{ fontSize: 11, fill: '#64748B' }}
-              label={{ value: 'Années', position: 'insideBottom', offset: -2, style: { fontSize: 10, fill: '#94A3B8' } }}
+              tick={{ fontSize: 11, fill: chart.text }}
+              label={{ value: 'Années', position: 'insideBottom', offset: -2, style: { fontSize: 10, fill: chart.text } }}
               ticks={Array.from({ length: Math.ceil(dureeMax / 12) + 1 }, (_, i) => i * 12).filter((m) => m <= dureeMax)}
             />
             <YAxis
               tickFormatter={formatEuro}
-              tick={{ fontSize: 11, fill: '#64748B' }}
-              label={{ value: 'Échéance / mois', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#94A3B8' } }}
+              tick={{ fontSize: 11, fill: chart.text }}
+              label={{ value: 'Échéance / mois', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: chart.text } }}
             />
             <Tooltip
               labelFormatter={(m) => `Mois ${m} (~${(m / 12).toFixed(1)} ans)`}
@@ -407,9 +412,9 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
                 ...sorted.map((p) => ({
                   value: `Capital ${p.libelle ?? PRET_TYPE_LABEL[p.type]}`,
                   type: 'square' as const,
-                  color: colorByPret[p.id] ?? '#0A1F3D',
+                  color: colorByPret[p.id] ?? chart.primary,
                 })),
-                { value: 'Intérêts', type: 'square' as const, color: '#C9A961' },
+                { value: 'Intérêts', type: 'square' as const, color: chart.secondary },
               ]}
             />
             {/* Capital par prêt — un Area stacké par prêt (couleur prêt) */}
@@ -419,7 +424,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
                 type="monotone"
                 dataKey={`capital_${p.id}`}
                 stackId="ech"
-                stroke={darken(colorByPret[p.id] ?? '#0A1F3D', 0.25)}
+                stroke={darken(colorByPret[p.id] ?? chart.primary, 0.25)}
                 fill={`url(#amortCapGrad_${p.id})`}
                 fillOpacity={1}
                 strokeWidth={1}
@@ -431,7 +436,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               type="monotone"
               dataKey="totalInteret"
               stackId="ech"
-              stroke="#92704A"
+              stroke={chart.series[3]}
               fill="url(#amortInteretGrad)"
               fillOpacity={1}
               strokeWidth={1}
@@ -509,7 +514,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
             {/* Panel de fond + grille */}
             <CartesianGrid
               strokeDasharray="2 4"
-              stroke="#CBD5E1"
+              stroke={chart.grid}
               fill="url(#panelBg)"
               fillOpacity={1}
               vertical
@@ -524,7 +529,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               tickFormatter={formatYearsClean}
               tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }}
               axisLine={{ stroke: '#64748B', strokeWidth: 1 }}
-              tickLine={{ stroke: '#94A3B8' }}
+              tickLine={{ stroke: chart.text }}
               label={{
                 value: 'Années',
                 position: 'insideBottom',
@@ -538,7 +543,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               tickFormatter={(v) => `${Math.round(v).toLocaleString('fr-FR')} €`}
               tick={{ fontSize: 11, fill: '#475569', fontWeight: 500 }}
               axisLine={{ stroke: '#64748B', strokeWidth: 1 }}
-              tickLine={{ stroke: '#94A3B8' }}
+              tickLine={{ stroke: chart.text }}
               width={72}
             />
 
@@ -548,13 +553,13 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
             {cible > 0 && (
               <ReferenceLine
                 y={Math.round(cible)}
-                stroke="#C9A961"
+                stroke={chart.secondary}
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
                 label={{
                   value: `Cible ${formatEuro(Math.round(cible))}`,
                   position: 'insideTopRight',
-                  fill: '#92704A',
+                  fill: chart.secondary,
                   fontSize: 10,
                   fontWeight: 700,
                   offset: 6,
@@ -589,7 +594,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               <Line
                 type="stepAfter"
                 dataKey="total"
-                stroke="#C9A961"
+                stroke={chart.secondary}
                 strokeWidth={2}
                 dot={false}
                 isAnimationActive={false}
@@ -638,7 +643,7 @@ export default function PretsChart({ prets, mode = 'krd', height = 320 }: Props)
               dot={false}
             />
           ))}
-          <Line type="stepAfter" dataKey="total" stroke="#0A1F3D" strokeWidth={2.5} strokeDasharray="4 4" dot={false} />
+          <Line type="stepAfter" dataKey="total" stroke={chart.primary} strokeWidth={2.5} strokeDasharray="4 4" dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>

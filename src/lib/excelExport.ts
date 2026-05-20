@@ -26,7 +26,6 @@ const NAVY = 'FF0A1F3D'
 const NAVY_DARK = 'FF06122A'
 const GOLD = 'FFC9A961'
 const GOLD_LIGHT = 'FFF6EED3'
-const IVORY = 'FFF8F7F3'
 const GRAY_LIGHT = 'FFF3F5FA'
 
 function fmtForType(fmt?: string): string | undefined {

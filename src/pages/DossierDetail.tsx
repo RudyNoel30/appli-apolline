@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, User2, Coins, Landmark, Home, Banknote, FolderOpen, StickyNote, Sparkles,
-  FileDown, FileText, Map, Calculator, CheckCircle2, AlertTriangle, XCircle, Clock,
-  Trash2, Pencil, Save, UserCheck, UserMinus, Mail, MailOpen, Reply, Paperclip, RefreshCw, ExternalLink,
-  Link as LinkIcon, Download, Plus, Receipt, Eye, Upload,
+  FileDown, FileText, Map, Calculator, CheckCircle2, AlertTriangle, XCircle,
+  Trash2, Pencil, UserCheck, UserMinus, Mail, MailOpen, Reply, Paperclip, RefreshCw, ExternalLink,
+  Download, Plus, Receipt, Eye, Upload,
 } from 'lucide-react'
 import FactureFormModal from '@/components/FactureFormModal'
 import StatusBadge from '@/components/StatusBadge'
@@ -19,10 +19,9 @@ import Modal from '@/components/Modal'
 import AiPreviewModal from '@/components/AiPreviewModal'
 import DossierEditor from '@/components/DossierEditor'
 import TabPiecesLocal from '@/components/TabPiecesLocal'
-import OneDriveFolderPicker, { type OneDriveSelection } from '@/components/OneDriveFolderPicker'
 import PretEditor from '@/components/PretEditor'
 import { toast } from 'sonner'
-import { STATUTS, piecesByCategorie, piecesAttendues, pretCouleur, type Dossier } from '@/data/mock'
+import { STATUTS, piecesAttendues, pretCouleur, type Dossier } from '@/data/mock'
 import { useStore, getO365EmailFor } from '@/stores/useStore'
 import { useAuth, usePermissions } from '@/auth/AuthContext'
 import { eur, pct, dateFr, dateTimeFr, cn, initials } from '@/lib/utils'
@@ -31,7 +30,6 @@ import { computeScoreConfiance } from '@/lib/score'
 import { saveFile, FILTERS } from '@/lib/saveFile'
 import * as mailGraph from '@/o365/mail'
 import type { GraphMail } from '@/o365/mail'
-import * as drive from '@/o365/onedrive'
 import { ai, type AiGenerateResult } from '@/db/api'
 
 type Tab = 'etatcivil' | 'revenus' | 'patrimoine' | 'projet' | 'financement' | 'pieces' | 'notes' | 'messages' | 'factures'
@@ -47,8 +45,8 @@ export default function DossierDetail() {
   const dossier = dossiers.find((d) => d.id === id)
   const realClient = clients.find((c) => c.id === dossier?.clientId)
   const materializeProspectFor = useStore((s) => s.materializeProspectFor)
-  const allNotes = useStore((s) => s.notes)
-  const notes = allNotes.filter((n) => n.dossierId === dossier?.id)
+  // Note : les notes sont chargées par TabNotes (sous-composant) avec son
+  // propre useStore — pas besoin de les fetch ici à nouveau.
 
   // Si le dossier référence un clientId qui n'est pas (encore) dans le store
   // local — typiquement après une création online sans pull complet, ou un
@@ -91,10 +89,8 @@ export default function DossierDetail() {
   const repasserEnProspect = useStore((s) => s.repasserEnProspect)
   const banques = useStore((s) => s.banques)
   const collaborateurs = useStore((s) => s.collaborateurs)
-  const apporteurs = useStore((s) => s.apporteurs)
   const allPrets = useStore((s) => s.prets)
   const dossierPrets = allPrets.filter((p) => p.dossierId === (dossier?.id ?? ''))
-  const { currentUser } = useAuth()
   const { can } = usePermissions()
 
   // ─── Calculs live LTV / HCSF / Score (NE PAS utiliser les valeurs stockées
@@ -1845,286 +1841,6 @@ function PretStatutPill({ statut }: { statut: import('@/data/mock').PretStatut }
   return <span className={`badge ${map[statut]}`}>{labels[statut]}</span>
 }
 
-function TabPieces({ dossier }: { dossier: Dossier }) {
-  const updateDossier = useStore((s) => s.updateDossier)
-  const allDossiers = useStore((s) => s.dossiers)
-  const settings = useStore((s) => s.settings)
-  const { currentUser } = useAuth()
-  const o365Email = getO365EmailFor(settings, currentUser?.id)
-
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [items, setItems] = useState<drive.DriveItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async (folderId: string, driveId?: string) => {
-    console.log('[TabPieces] load', { folderId, driveId })
-    setLoading(true)
-    setError(null)
-    try {
-      const list = await drive.listChildren(folderId, driveId)
-      console.log('[TabPieces] loaded', list.length, 'items')
-      setItems(list)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      console.warn('[TabPieces] load failed', msg)
-      const needsReauth = msg.includes('consent') || msg.includes('Files.Read') ||
-        msg.includes('403') || msg.includes('401') || msg.includes('Non connecté')
-      setError(needsReauth
-        ? 'Reconnectez votre compte Microsoft (Paramètres → Intégrations) pour autoriser l\'accès aux fichiers partagés.'
-        : msg.slice(0, 200))
-      setItems([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!dossier.oneDriveFolderId) {
-      setItems([])
-      return
-    }
-    if (!o365Email) {
-      // Lié mais pas de session O365 active — on n'efface pas pour ne pas masquer
-      // l'état précédent, mais on ne tente pas le fetch.
-      return
-    }
-    void load(dossier.oneDriveFolderId, dossier.oneDriveDriveId)
-  }, [dossier.oneDriveFolderId, dossier.oneDriveDriveId, o365Email, load])
-
-  const handleSelectFolder = async (sel: OneDriveSelection) => {
-    // Garde-fou : avertir si le même folder OneDrive est déjà lié à un autre
-    // dossier de courtage — sinon on voit les pièces d'autres clients dans
-    // l'onglet Pièces (cause classique de confusion).
-    const conflict = allDossiers.find((d) => d.id !== dossier.id && d.oneDriveFolderId === sel.id)
-    if (conflict) {
-      const ok = await confirmDialog(
-        `⚠️ Ce dossier OneDrive est déjà lié au dossier ${conflict.ref} (${conflict.clientNom}).\n\n` +
-        `Si tu confirmes, les pièces apparaîtront dans les DEUX dossiers Apolline.\n\n` +
-        `Continuer quand même ?`,
-        { title: 'Conflit OneDrive', kind: 'warning' },
-      )
-      if (!ok) return
-    }
-    updateDossier(dossier.id, {
-      oneDriveFolderId: sel.id,
-      oneDriveDriveId: sel.driveId,
-      oneDriveFolderName: sel.name,
-      oneDriveFolderPath: sel.path,
-      oneDriveFolderWebUrl: sel.webUrl,
-    })
-    toast.success('Dossier OneDrive associé', { description: sel.path })
-  }
-
-  const handleDetach = () => {
-    // null (pas undefined) pour que le patch soit envoyé au backend et que la
-    // colonne soit bien clear-ée — les undefined sont strippés par JSON.stringify.
-    updateDossier(dossier.id, {
-      oneDriveFolderId: null as unknown as undefined,
-      oneDriveDriveId: null as unknown as undefined,
-      oneDriveFolderName: null as unknown as undefined,
-      oneDriveFolderPath: null as unknown as undefined,
-      oneDriveFolderWebUrl: null as unknown as undefined,
-    })
-    setItems([])
-    setError(null)
-    toast.success('Dossier OneDrive détaché')
-  }
-
-  const handleDownload = async (item: drive.DriveItem) => {
-    const t = toast.loading(`Téléchargement de ${item.name}…`)
-    try {
-      const ref = drive.effectiveRef(item)
-      const url = await drive.getDownloadUrl(ref.id, ref.driveId)
-      if (!url) throw new Error('URL indisponible')
-      window.open(url, '_blank')
-      toast.success(`${item.name} prêt`, { id: t })
-    } catch (e: any) {
-      toast.error('Échec téléchargement', { id: t, description: e?.message })
-    }
-  }
-
-  const isLinked = !!dossier.oneDriveFolderId
-  const allFiles = items.filter((i) => !drive.isFolder(i))
-  const subfolders = items.filter((i) => drive.isFolder(i))
-  const filesByCat: Record<'P1' | 'P2' | 'P3' | 'P4' | 'P5', drive.DriveItem[]> = {
-    P1: [], P2: [], P3: [], P4: [], P5: [],
-  }
-  const unclassified: drive.DriveItem[] = []
-  for (const f of allFiles) {
-    const cat = drive.categoryFromFilename(f.name)
-    if (cat) filesByCat[cat].push(f)
-    else unclassified.push(f)
-  }
-
-  if (!isLinked) {
-    return (
-      <>
-        <div className="card p-8 text-center space-y-3">
-          <FolderOpen className="h-12 w-12 mx-auto text-navy-300" />
-          <div>
-            <div className="font-semibold text-navy-900">Aucun dossier OneDrive associé</div>
-            <div className="text-xs text-navy-500 mt-1">
-              Associez le dossier OneDrive du client pour voir ses pièces ici automatiquement.
-            </div>
-          </div>
-          <button
-            onClick={() => setPickerOpen(true)}
-            disabled={!o365Email}
-            className="btn-gold inline-flex"
-            title={!o365Email ? 'Connectez d\'abord Microsoft 365 (Paramètres → Intégrations)' : ''}
-          >
-            <LinkIcon className="h-4 w-4" /> Associer un dossier OneDrive
-          </button>
-          {!o365Email && (
-            <div className="text-[11px] text-amber-700">
-              Connectez d'abord Microsoft 365 dans Paramètres → Intégrations.
-            </div>
-          )}
-        </div>
-        <OneDriveFolderPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={handleSelectFolder} />
-      </>
-    )
-  }
-
-  return (
-    <>
-      {/* En-tête lien OneDrive */}
-      <div className="card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <FolderOpen className="h-4 w-4 text-gold-600 shrink-0" />
-          <span className="text-xs text-navy-500 shrink-0">Lié à :</span>
-          <span className="text-xs font-medium text-navy-900 truncate" title={dossier.oneDriveFolderPath}>
-            {dossier.oneDriveFolderName ?? dossier.oneDriveFolderId}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {dossier.oneDriveFolderWebUrl && (
-            <a href={dossier.oneDriveFolderWebUrl} target="_blank" rel="noopener noreferrer"
-              className="text-xs font-semibold text-gold-700 hover:text-gold-800 inline-flex items-center gap-1">
-              <ExternalLink className="h-3.5 w-3.5" /> Ouvrir
-            </a>
-          )}
-          <button onClick={() => dossier.oneDriveFolderId && load(dossier.oneDriveFolderId, dossier.oneDriveDriveId)}
-            className="text-xs text-navy-600 hover:text-navy-900 inline-flex items-center gap-1">
-            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-            {loading ? 'Sync…' : 'Actualiser'}
-          </button>
-          <button onClick={() => setPickerOpen(true)}
-            className="text-xs text-navy-500 hover:text-navy-900 inline-flex items-center gap-1">
-            Modifier
-          </button>
-          <button onClick={handleDetach}
-            className="text-xs text-rose-700 hover:text-rose-900 inline-flex items-center gap-1"
-            title="Détacher le dossier OneDrive">
-            Détacher
-          </button>
-        </div>
-      </div>
-
-      {!o365Email && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 mb-4">
-          <div className="font-semibold">Microsoft 365 non connecté</div>
-          <div className="mt-0.5">Connectez votre compte Microsoft depuis Paramètres → Intégrations pour voir les pièces de ce dossier.</div>
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 mb-4">
-          <div className="font-semibold">Impossible de charger</div>
-          <div className="mt-0.5">{error}</div>
-        </div>
-      )}
-
-      {loading && items.length === 0 && (
-        <div className="card p-6 mb-4 text-center text-sm text-navy-500 flex items-center justify-center gap-2">
-          <RefreshCw className="h-4 w-4 animate-spin" /> Chargement des pièces depuis OneDrive…
-        </div>
-      )}
-
-      {!loading && !error && o365Email && items.length === 0 && (
-        <div className="card p-6 mb-4 text-center text-sm text-navy-500">
-          <FolderOpen className="h-8 w-8 mx-auto text-navy-300 mb-2" />
-          Le dossier OneDrive est vide.
-          <div className="text-[11px] text-navy-400 mt-1">
-            Ajoutez les pièces du client directement dans OneDrive (préfixées <code>P1_</code>, <code>P2_</code>…) puis cliquez sur « Actualiser ».
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {(['P1', 'P2', 'P3', 'P4', 'P5'] as const).map((cat) => {
-          const catItems = filesByCat[cat]
-          return (
-            <div key={cat}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-mono text-xs font-bold text-gold-700">{cat}</span>
-                <span className="text-sm font-semibold text-navy-900">{piecesByCategorie[cat]}</span>
-                <span className="text-xs text-navy-400">· {catItems.length}</span>
-              </div>
-              <div className="rounded-lg border border-navy-100 divide-y divide-navy-50 overflow-hidden">
-                {catItems.length === 0 ? (
-                  <div className="px-4 py-3 text-xs text-navy-400 italic">Aucune pièce dans cette catégorie</div>
-                ) : (
-                  catItems.map((item) => {
-                    const modified = drive.lastModifiedOf(item)
-                    return (
-                      <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-navy-50/50">
-                        <FileText className="h-4 w-4 text-gold-600" />
-                        <div className="flex-1 text-sm text-navy-800 truncate" title={item.name}>{item.name}</div>
-                        <span className="text-[11px] text-navy-400 shrink-0">{drive.formatSize(drive.sizeOf(item))}</span>
-                        {modified && <span className="text-[11px] text-navy-400 shrink-0">{dateFr(modified)}</span>}
-                        <button onClick={() => void handleDownload(item)} className="text-navy-400 hover:text-navy-900"
-                          title="Télécharger">
-                          <Download className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </div>
-          )
-        })}
-
-        {unclassified.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">?</span>
-              <span className="text-sm font-semibold text-navy-900">Sans préfixe P1-P5</span>
-              <span className="text-xs text-navy-400">· {unclassified.length}</span>
-            </div>
-            <div className="rounded-lg border border-amber-200 divide-y divide-amber-50 overflow-hidden">
-              {unclassified.map((item) => {
-                const modified = drive.lastModifiedOf(item)
-                return (
-                  <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-amber-50/50">
-                    <FileText className="h-4 w-4 text-amber-600" />
-                    <div className="flex-1 text-sm text-navy-800 truncate" title={item.name}>{item.name}</div>
-                    <span className="text-[11px] text-navy-400 shrink-0">{drive.formatSize(drive.sizeOf(item))}</span>
-                    {modified && <span className="text-[11px] text-navy-400 shrink-0">{dateFr(modified)}</span>}
-                    <button onClick={() => void handleDownload(item)} className="text-navy-400 hover:text-navy-900"
-                      title="Télécharger">
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {subfolders.length > 0 && (
-          <div className="text-[11px] text-navy-400 italic px-1">
-            Note : {subfolders.length} sous-dossier{subfolders.length > 1 ? 's' : ''} ignoré{subfolders.length > 1 ? 's' : ''} dans le listing — naviguez sur OneDrive directement pour les voir.
-          </div>
-        )}
-      </div>
-
-      <OneDriveFolderPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={handleSelectFolder} />
-    </>
-  )
-}
 
 function TabNotes({ dossierId }: { dossierId: string }) {
   const allNotes = useStore((s) => s.notes)

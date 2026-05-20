@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  FolderSearch, FileText, RefreshCw, Sparkles, CheckCircle2, AlertCircle,
+  FolderSearch, FileText, RefreshCw, Sparkles, AlertCircle,
   ArrowRight, Search, Folder, Filter, Files,
 } from 'lucide-react'
 import { toast } from 'sonner'

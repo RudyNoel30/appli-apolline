@@ -1,4 +1,4 @@
-import { saveFile, FILTERS } from './saveFile'
+import { saveFile } from './saveFile'
 
 export type HtmlSection =
   | { kind: 'kpis'; items: { label: string; value: string; hint?: string }[] }
