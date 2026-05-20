@@ -16,6 +16,7 @@ import * as mail from '@/o365/mail'
 import * as contacts from '@/o365/contacts'
 import type { GraphMail, GraphMailFull, MailFolder } from '@/o365/mail'
 import { cn, dateTimeFr } from '@/lib/utils'
+import { sanitizeHtml, stripHtml } from '@/lib/sanitizeHtml'
 
 function relativeTime(iso?: string): string {
   if (!iso) return ''
@@ -1340,20 +1341,16 @@ function RecipientField({
 
 /* ───────────────────── Helpers ───────────────────── */
 
-function stripHtml(html: string): string {
-  const tmp = document.createElement('div')
-  tmp.innerHTML = html
-  return tmp.textContent || tmp.innerText || ''
-}
-
-function sanitizeHtml(html: string): string {
-  // Sanitization basique : supprime les <script>, attributs on*, javascript: links
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '')
-    .replace(/javascript:/gi, '')
-}
+// stripHtml + sanitizeHtml sont importés depuis @/lib/sanitizeHtml — pas de
+// fonction locale qui ferait doublon (et serait moins safe car ancienne version
+// regex-only).
+//
+// La sanitization HTML est centralisée dans @/lib/sanitizeHtml
+// (DOMParser + whitelist tags/attrs/URL schemes). Voir ce fichier pour la
+// politique. L'ancien code regex-only (script + on*) était trop permissif :
+// passaient <img src=x onerror=…>, <iframe src=javascript:…>, <style>@import…</style>,
+// commentaires conditionnels Outlook utilisés comme vecteur d'évasion, etc.
+// Refonte suite à un audit Gemini de Rudy (2026-05).
 
 function b64ToBlob(b64: string, contentType: string): Blob {
   const bytes = atob(b64)
@@ -1453,31 +1450,9 @@ function insertHtmlAtCursor(html: string) {
   }
 }
 
-/**
- * Sanitization du HTML collé depuis Word/Outlook/web.
- * Retire scripts, styles globaux, balises Office (o:p, w:WordDocument), classes, mais
- * conserve le formatage essentiel (b/i/u/font-style inline, listes, liens, tableaux).
- */
-function sanitizePastedHtml(html: string): string {
-  let s = html
-  // Supprime balises XML/Office
-  s = s.replace(/<\?xml[^>]*>/gi, '')
-  s = s.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')
-  s = s.replace(/<!--[\s\S]*?-->/g, '')
-  s = s.replace(/<o:p[^>]*>[\s\S]*?<\/o:p>/gi, '')
-  s = s.replace(/<\/?o:[^>]+>/gi, '')
-  s = s.replace(/<\/?w:[^>]+>/gi, '')
-  s = s.replace(/<\/?meta[^>]*>/gi, '')
-  s = s.replace(/<\/?link[^>]*>/gi, '')
-  s = s.replace(/<\/?style[^>]*>[\s\S]*?<\/style>/gi, '')
-  s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-  // Supprime scripts et handlers
-  s = s.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-  s = s.replace(/\son\w+="[^"]*"/gi, '')
-  s = s.replace(/\son\w+='[^']*'/gi, '')
-  s = s.replace(/javascript:/gi, '')
-  // Supprime class="MsoNormal" et autres classes Word
-  s = s.replace(/\sclass="[^"]*"/gi, '')
-  s = s.replace(/\slang="[^"]*"/gi, '')
-  return s
-}
+// sanitizePastedHtml = même politique de désinfection que pour les mails
+// reçus (le helper @/lib/sanitizeHtml retire déjà o:*, w:*, style, link, meta,
+// class, lang, scripts et handlers). On garde un nom alias pour la lisibilité
+// — quand un jour on voudrait une politique différente entre "mail entrant"
+// et "presse-papier", on saura déjà où ajouter une variante.
+const sanitizePastedHtml = sanitizeHtml

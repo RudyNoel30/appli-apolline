@@ -18,6 +18,7 @@ import { confirmDialog } from '@/lib/dialog'
 import * as o365 from '@/o365/msal'
 import { O365_CLIENT_ID, O365_TENANT_ID } from '@/o365/config'
 import { saveFile, FILTERS } from '@/lib/saveFile'
+import { sanitizeHtml } from '@/lib/sanitizeHtml'
 import { exportToXlsx } from '@/lib/excelExport'
 import { sync, auth } from '@/db/api'
 
@@ -258,7 +259,11 @@ function ProfilPane() {
             <div className="text-[11px] text-navy-500 mt-3 mb-1 font-semibold uppercase tracking-wider">Aperçu</div>
             <div
               className="rounded-lg border border-navy-100 p-3 bg-ivory text-sm"
-              dangerouslySetInnerHTML={{ __html: f.signatureHtml }}
+              // ⚠ HTML utilisateur → JAMAIS sans sanitization. Même si c'est sa
+              // propre signature (self-XSS faible), elle est aussi envoyée par
+              // email aux clients/banques — un copier-coller depuis une source
+              // malveillante embarquerait le code dans les mails sortants.
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(f.signatureHtml) }}
             />
           </>
         )}
